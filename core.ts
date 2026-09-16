@@ -13,7 +13,8 @@
 
 import { App, Window, Box } from "./components/modules/widget.ts"
 import { Anchor, Layer, Exclusivity } from "./components/modules/widget.ts"
-import { execAsync, timeout, interval } from "astal"
+import { execAsync } from "ags/process"
+import { timeout, interval } from "ags/time"
 import AstalNotifd from "gi://AstalNotifd"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
@@ -229,7 +230,11 @@ const toggleHudTop = () => {
 
 App.start({
  instanceName: "cyberpunk",
- requestHandler(request, res) {
+ requestHandler(argv, res) {
+ // ags v3.1 pasa argv: string[] (uno por arg de "ags request cyberpunk a b c"),
+ // la lib vieja pasaba un string ya unido - se rearma para no tocar
+ // toda la logica de abajo (startsWith/slice sobre un solo string).
+ const request = argv.join(" ")
  const reply = (r) => { try { res(r) } catch {} }
  if (request === "launcher") {
  execAsync(["sh", "-c", "wofi --show drun"]).catch(print)

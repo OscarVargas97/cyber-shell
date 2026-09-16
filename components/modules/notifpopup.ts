@@ -1,6 +1,7 @@
 import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import AstalNotifd from "gi://AstalNotifd"
 import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
 import { TITLE, MONO, NAVINE, NEUE, ORBITRON } from "./fonts.ts"

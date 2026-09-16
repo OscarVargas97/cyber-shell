@@ -1,6 +1,6 @@
 import { Window, Box, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval, timeout } from "astal"
+import { interval, timeout } from "ags/time"
 import GLib from "gi://GLib"
 import AstalWp from "gi://AstalWp"
 import { makePlane, tiltBar, tiltText, strokePath } from "./proj.ts"

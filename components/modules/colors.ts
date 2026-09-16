@@ -1,6 +1,6 @@
 import GLib from "gi://GLib"
 import GdkPixbufLib from "gi://Gdk?version=3.0"
-import { execAsync } from "astal"
+import { execAsync } from "ags/process"
 import { applyWmFromTheme } from "./wmconfig.ts"
 import { CYBER_DIR, USER_DIR } from "../../env.ts"
 

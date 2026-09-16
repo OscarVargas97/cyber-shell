@@ -4,7 +4,8 @@ import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
 import { Layer, Exclusivity, Keymode } from "./widget.ts"
 
 const SS_DEFAULT = 1
-import { execAsync, interval, timeout } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT, SCALE, winScale, monW } from "../../env.ts"

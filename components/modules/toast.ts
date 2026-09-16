@@ -1,6 +1,6 @@
 import { Window, DrawingArea } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval } from "astal"
+import { interval } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW } from "../../env.ts"

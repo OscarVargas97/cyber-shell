@@ -1,4 +1,5 @@
-import { execAsync, timeout } from "astal"
+import { execAsync } from "ags/process"
+import { timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import GLib from "gi://GLib"

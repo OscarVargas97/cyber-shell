@@ -1,5 +1,5 @@
 import GLib from "gi://GLib"
-import { execAsync } from "astal"
+import { execAsync } from "ags/process"
 import { USER_DIR } from "../../env.ts"
 
 

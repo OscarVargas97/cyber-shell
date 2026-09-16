@@ -1,6 +1,7 @@
 import { Window, DrawingArea, EventBox, activeMonitor, monitorAtPoint } from "./widget.ts"
 import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import { SCREEN_WIDTH , SCREEN_HEIGHT } from "../../env.ts"
 import { NEON, f, onColorChange, USER, tintSurface, tintPixbuf, imgTint, notifIconTint } from "./colors.ts"

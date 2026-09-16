@@ -1,4 +1,6 @@
-import { Variable, interval, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval } from "ags/time"
+import { Variable } from "./compat.ts"
 import GLib from "gi://GLib"
 import { NEON, RGB } from "./colors.ts"
 

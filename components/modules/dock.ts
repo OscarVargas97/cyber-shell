@@ -1,6 +1,7 @@
 import { Box, DrawingArea, EventBox } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import AstalNotifd from "gi://AstalNotifd"
 import { toggleModal, isModalOpen, onModalChange } from "./cmodal.ts"
 import { toggleNotifHud, isNotifHudOpen, onNotifHudChange, notifCount } from "./notifmessages.ts"
