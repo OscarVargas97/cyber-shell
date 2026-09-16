@@ -278,3 +278,21 @@ window.ws_anim, window.banner, window.rec, window.rec_trans, window.region { bac
 
 // ── horizontal dock (bottom-right) ───────────────────────────────────────────
 .hordock-wrap { margin: 0 0 8px 66px; }
+
+// ── panel de shortcuts (Mod+K) ────────────────────────────────────────────────
+.shortcuts-wrap {
+    background-color: rgba(6, 9, 14, 0.94);
+    border: 1px solid $line;
+    border-radius: 6px;
+    box-shadow: 0 0 24px $red-d;
+    padding: 18px 22px;
+}
+.shortcuts-title {
+    font-family: "Quantico", sans-serif; font-size: 15px; font-weight: 700;
+    color: $red; margin: 0 0 10px 0;
+}
+.shortcut-row {
+    font-family: "Tektur", monospace; font-size: 12px;
+    color: rgba(228, 240, 255, 0.85);
+    padding: 2px 0;
+}

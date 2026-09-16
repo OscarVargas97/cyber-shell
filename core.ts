@@ -23,6 +23,7 @@ import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf, USER_D
 import { loadUserColors } from "./components/modules/colors.ts"
 import { applyWmRules, applyWmFromTheme } from "./components/modules/wmconfig.ts"
 import { applyPerfPreset, PERF_PRESETS } from "./components/modules/config.ts"
+import { ShortcutsWindow, toggleShortcuts } from "./components/modules/shortcuts.ts"
 import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
 import { SidePanel, openCityModal, openForecastModal } from "./components/modules/sidepanel.ts"
 import { openTimeModal } from "./components/modules/timeset.ts"
@@ -288,6 +289,9 @@ App.start({
  } else if (request === "record-stop") {
  try { setRecording(false) } catch (e) { print(e) }
  reply("ok")
+ } else if (request === "shortcuts") {
+ try { toggleShortcuts() } catch (e) { print(e) }
+ reply("ok")
  } else if (request === "toggle-hud") {
  try {
 
@@ -348,6 +352,7 @@ App.start({
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
  passthrough(AurBarWindow())
+ ShortcutsWindow()
  NotifHudWindow()
  NowPlayingWindow()
  WsAnimWindow()
