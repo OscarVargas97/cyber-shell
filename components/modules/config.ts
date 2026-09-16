@@ -60,6 +60,16 @@ export const sndFile = (k: string, fallback: string): string => {
 }
 
 
+// Los valores string de config (sndNotifFile, sndWheelActive, etc.) son
+// rutas de archivo de sonido que terminan interpoladas sin re-escapar
+// dentro de `sh -c "..."` en varios módulos (notifpopup.ts,
+// notifmessages.ts, appsmenu.ts). Si user_config.lua estuviera
+// corrompido con un valor tipo `$(comando)` o con una comilla suelta,
+// eso ejecutaría código arbitrario. Se corta acá, en el único lugar por
+// el que pasan todos los valores al cargarse, en vez de escapar en cada
+// sitio de uso por separado.
+const isSafePathValue = (s: string): boolean => !/["'`$\\;|&\n]/.test(s)
+
 export const loadUserConfig = (): void => {
  try {
      if (!GLib.file_test(CFG_PATH, GLib.FileTest.EXISTS)) return
@@ -69,7 +79,11 @@ export const loadUserConfig = (): void => {
          const m = /cfg\["(\w+)"\]\s*=\s*(true|false|"([^"]*)")/.exec(line)
          if (!m || !CFG_KEYS.includes(m[1])) continue
          if (typeof DEF[m[1]] === "boolean") { if (m[2] !== "true" && m[2] !== "false") continue; CFG[m[1]] = m[2] === "true" }
-         else { if (m[3] === undefined) continue; CFG[m[1]] = m[3] }
+         else {
+             if (m[3] === undefined) continue
+             if (!isSafePathValue(m[3])) { print(`[cfg] valor inseguro para ${m[1]}, ignorado: ${m[3]}`); continue }
+             CFG[m[1]] = m[3]
+         }
      }
  } catch (e) { print("[cfg] load:", e) }
 }

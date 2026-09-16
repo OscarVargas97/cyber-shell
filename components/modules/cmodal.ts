@@ -334,9 +334,9 @@ const SRC_OUTS_CMD = `pactl list source-outputs 2>/dev/null | awk '/^Source Outp
 
 const APPVOL_STATE = `$HOME/.cache/cyberpunk/appvol.conf`
 const APPVOL_STATE_SRC = `$HOME/.cache/cyberpunk/appvol_src.conf`
-const shq = (s) => String(s).replace(/'/g, `'\\''`)
+const shqSingle = (s) => String(s).replace(/'/g, `'\\''`)
 const setAppVol = (name, id, t) => {
-    const pct = Math.round(t * 100), nm = shq(name)
+    const pct = Math.round(t * 100), nm = shqSingle(name)
     sh(`f="${APPVOL_STATE}"; mkdir -p "$(dirname "$f")"; touch "$f"; awk -F= -v n='${nm}' -v v='${pct}' 'BEGIN{s=0}$1==n{print n"="v;s=1;next}{print}END{if(!s)print n"="v}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; pactl set-sink-input-volume ${id} ${pct}%`)
 }
 
@@ -363,7 +363,7 @@ const setDevVol = (kind, id, t) => {
     sh(kind === "sink" ? SINK_VOL_SET(id, pct) : SRC_VOL_SET(id, pct))
 }
 const setAppVolSrc = (name, id, t) => {
-    const pct = Math.round(t * 100), nm = shq(name)
+    const pct = Math.round(t * 100), nm = shqSingle(name)
     sh(`f="${APPVOL_STATE_SRC}"; mkdir -p "$(dirname "$f")"; touch "$f"; awk -F= -v n='${nm}' -v v='${pct}' 'BEGIN{s=0}$1==n{print n"="v;s=1;next}{print}END{if(!s)print n"="v}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; pactl set-source-output-volume ${id} ${pct}%`)
 }
 
@@ -738,7 +738,7 @@ const drawMenu = (ctx, push, fx, fy, items, onDismiss, X, Y, W, H) => {
 const WifiCtrl = () => {
     const st: any = { on: false, nets: [], saved: [], selected: null }
     let ctrl
-    const shq = (s) => s.replace(/[\\"$`]/g, "\\$&")
+    const shqDouble = (s) => s.replace(/[\\"$`]/g, "\\$&")
     const refresh = () => sh("nmcli radio wifi 2>/dev/null").then((o) => {
         st.on = /enabled/i.test(o)
         if (!st.on) { st.nets = []; if (ctrl.isOpen() && !pwMode) updateWheel([]); ctrl.requestDraw(); return }
@@ -765,7 +765,7 @@ const WifiCtrl = () => {
             onSubmit: (pw) => {
                 if (!pw) return
                 closeWheel()
-                sh(`nmcli dev wifi connect "${shq(n.ssid)}" password "${shq(pw)}" 2>/dev/null && echo OK`).then((o) => {
+                sh(`nmcli dev wifi connect "${shqDouble(n.ssid)}" password "${shqDouble(pw)}" 2>/dev/null && echo OK`).then((o) => {
                     if (o && o.includes("OK")) timeout(1200, refresh)
                     else askPassword(n, true)
                 })
@@ -776,7 +776,7 @@ const WifiCtrl = () => {
     const tryConnect = (n) => {
         if (!n || n.active) return
         if (n.sec && !st.saved.some((s) => s === n.ssid)) { askPassword(n, false); return }
-        sh(`nmcli dev wifi connect "${shq(n.ssid)}" 2>/dev/null && echo OK`).then((o) => {
+        sh(`nmcli dev wifi connect "${shqDouble(n.ssid)}" 2>/dev/null && echo OK`).then((o) => {
             if (o && o.includes("OK")) timeout(1200, refresh)
             else if (n.sec) askPassword(n, true)
             else timeout(1200, refresh)
@@ -805,7 +805,7 @@ const WifiCtrl = () => {
                 const btnH = 24, gap = 8
                 const isActive = st.selected.active
                 drawBtn(ctx, g.push, px, ty, 130, btnH, isActive ? "DISCONNECT" : "CONNECT",
-                    () => isActive ? sh(`nmcli con down id "${shq(st.selected.ssid)}"`).then(() => timeout(1200, refresh)) : tryConnect(st.selected),
+                    () => isActive ? sh(`nmcli con down id "${shqDouble(st.selected.ssid)}"`).then(() => timeout(1200, refresh)) : tryConnect(st.selected),
                     false, g.col)
                 const forgetW = panelW - 28 - 130 - gap
                 const isSaved = st.saved.some((s) => s === st.selected.ssid)

@@ -240,12 +240,20 @@ const writeFile = (raw: string): boolean => {
     }
 }
 
-const fmtRebind = (action_id: string, combo: string): string => `CD.rebind("${action_id}", "${combo}")`
+// Sin escapar, un valor con una comilla doble suelta corta el literal
+// Lua ahí mismo y deja inyectar código Lua arbitrario que Hyprland
+// terminaría ejecutando. Esta ruta está inactiva en nuestro despliegue
+// (DECISIONS.md #9 usa configType = "hyprlang", no el config Lua), pero
+// el bug es real en el código igual - se arregla acá, en el único
+// lugar por el que pasan todos los strings antes de ir a un archivo Lua.
+const luaStr = (s: string): string => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+
+const fmtRebind = (action_id: string, combo: string): string => `CD.rebind("${luaStr(action_id)}", "${luaStr(combo)}")`
 const fmtAdd = (label: string, mod: string, key: string, kind: string, value: string): string =>
-    `CD.add("${label}", "${mod}", "${key}", "${kind}", "${value}")`
+    `CD.add("${luaStr(label)}", "${luaStr(mod)}", "${luaStr(key)}", "${luaStr(kind)}", "${luaStr(value)}")`
 const fmtBind = (combo: string, dispatcher: string, args: string | null): string => {
-    if (args) return `hl.bind("${combo}", hl.dsp.${dispatcher}("${args}"))`
-    return `hl.bind("${combo}", hl.dsp.${dispatcher})`
+    if (args) return `hl.bind("${luaStr(combo)}", hl.dsp.${dispatcher}("${luaStr(args)}"))`
+    return `hl.bind("${luaStr(combo)}", hl.dsp.${dispatcher})`
 }
 
 export type Mutation =
@@ -358,7 +366,7 @@ export const removeCustom = (raw_line: number): { ok: boolean; backup: string } 
 export const updateCustomCombo = (raw_line: number, combo: string): { ok: boolean; backup: string } =>
     writeUserLua([{ op: "update-custom", raw_line, combo }])
 
-const fmtThemeMod = (m: string): string => `CD.themeMod("${m}")`
+const fmtThemeMod = (m: string): string => `CD.themeMod("${luaStr(m)}")`
 
 export const setThemeMod = (m: string): { ok: boolean; backup: string } => {
     const state = readUserLua()
