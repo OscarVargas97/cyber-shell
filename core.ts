@@ -19,7 +19,7 @@ import AstalNotifd from "gi://AstalNotifd"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
-import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf } from "./env.ts"
+import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf, USER_DIR } from "./env.ts"
 import { loadUserColors } from "./components/modules/colors.ts"
 import { applyWmRules, applyWmFromTheme } from "./components/modules/wmconfig.ts"
 import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
@@ -46,7 +46,9 @@ import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
 import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
 
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
-const CSS = `${COMPONENTS_DIR}/style/cyber.css`
+// CYBER_DIR/COMPONENTS_DIR viven en el store de Nix (solo lectura) - el
+// css compilado va a USER_DIR (~/.config/cyberarch), que es escribible.
+const CSS = `${USER_DIR}/cyber.css`
 
 const compileCss = async () => {
  try {
@@ -142,17 +144,16 @@ const surfaceRect = (win) => {
 const applyHudInput = (win) => {
  try {
  const gw = win.get_window?.(); if (!gw) return
- if (hudOnTop) {
- const aw = win.get_allocated_width?.() || 0, ah = win.get_allocated_height?.() || 0
- if (aw > 0 && ah > 0) {
- const full = new Cairo.Region()
- full.unionRectangle({ x: 0, y: 0, width: aw, height: ah })
- gw.input_shape_combine_region(full, 0, 0)
- }
- return
- }
- const r = shapedRegion(win, !!(win as any)._rectHit)
- gw.input_shape_combine_region(r || null, 0, 0)
+ // shapedRegion() redibuja el widget a mano en una superficie offscreen
+ // para recortar el hitbox a los pixeles no transparentes (permite
+ // click-through en zonas vacias). Ese truco depende de win.draw()
+ // funcionando fuera del ciclo normal de refresco - poco confiable en
+ // GTK3+Wayland (a diferencia de X11, donde se origino esta lib) y
+ // termina dejando toda la ventana sin poder recibir clicks. Se
+ // resetea a null: hit-test default, todo el rectangulo es clickeable
+ // (se pierde el click-through en zonas transparentes, no el click en
+ // los botones reales).
+ gw.input_shape_combine_region(null, 0, 0)
 } catch {}
 }
 const applyHudInputAll = () => { for (const w of hudWins) deferShape(w) }
