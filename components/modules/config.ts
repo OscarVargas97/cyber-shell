@@ -112,6 +112,36 @@ export const resetCfg = (keys: string[]): void => {
  notifyConfigChange()
 }
 
+// 3 planes de rendimiento (pedido de Oscar): "animWheel" (el menu de
+// apps - la que le encanta) queda SIEMPRE en true, en los 3 planes. Lo
+// que baja es todo lo demas: los otros loops de redibujado propios de
+// cyber-shell, y el blur de Hyprland (decoration:blur, no lo controla
+// este archivo - es config.ts propio de Hyprland, se toca por hyprctl
+// directo, mismo mecanismo que applyHyprAnim usa para animations).
+export const PERF_PRESETS = ["full", "balanced", "performance"] as const
+export type PerfPreset = (typeof PERF_PRESETS)[number]
+
+const PRESET_CFG: Record<PerfPreset, Record<string, CfgVal>> = {
+ full: { anim: true, animGlitch: true, animModal: true, animGauge: true, animNotif: true, animMusic: true, animWheel: true },
+ balanced: { anim: true, animGlitch: false, animModal: true, animGauge: false, animNotif: true, animMusic: false, animWheel: true },
+ performance: { anim: true, animGlitch: false, animModal: false, animGauge: false, animNotif: false, animMusic: false, animWheel: true },
+}
+const PRESET_BLUR: Record<PerfPreset, { enabled: boolean; passes: number }> = {
+ full: { enabled: true, passes: 3 },
+ balanced: { enabled: true, passes: 1 },
+ performance: { enabled: false, passes: 1 },
+}
+
+export const applyPerfPreset = (name: string): PerfPreset | null => {
+ if (!(PERF_PRESETS as readonly string[]).includes(name)) return null
+ const preset = name as PerfPreset
+ for (const [k, v] of Object.entries(PRESET_CFG[preset])) setCfg(k, v)
+ const blur = PRESET_BLUR[preset]
+ execAsync(["hyprctl", "keyword", "decoration:blur:enabled", blur.enabled ? "1" : "0"]).catch(() => {})
+ if (blur.enabled) execAsync(["hyprctl", "keyword", "decoration:blur:passes", String(blur.passes)]).catch(() => {})
+ return preset
+}
+
 
 export const adoptSound = (key: string, src: string): boolean => {
  try {

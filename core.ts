@@ -22,6 +22,7 @@ import Gdk from "gi://Gdk?version=3.0"
 import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf, USER_DIR } from "./env.ts"
 import { loadUserColors } from "./components/modules/colors.ts"
 import { applyWmRules, applyWmFromTheme } from "./components/modules/wmconfig.ts"
+import { applyPerfPreset, PERF_PRESETS } from "./components/modules/config.ts"
 import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
 import { SidePanel, openCityModal, openForecastModal } from "./components/modules/sidepanel.ts"
 import { openTimeModal } from "./components/modules/timeset.ts"
@@ -297,6 +298,12 @@ App.start({
  } catch (e) { print(e); reply("err") }
  } else if (request.startsWith("toast")) {
  try { showToast(request.slice(5).trim() || undefined) } catch (e) { print(e) }
+ reply("ok")
+ } else if (request.startsWith("perf ")) {
+ try {
+ const applied = applyPerfPreset(request.slice(5).trim())
+ showToast(applied ? `PERF: ${applied.toUpperCase()}` : `PERF: ?? (usar ${PERF_PRESETS.join("/")})`)
+ } catch (e) { print(e) }
  reply("ok")
  } else if (request === "weather") {
  try { openCityModal() } catch (e) { print(e) }
