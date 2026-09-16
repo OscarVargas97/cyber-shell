@@ -279,6 +279,14 @@ window.ws_anim, window.banner, window.rec, window.rec_trans, window.region { bac
 // ── horizontal dock (bottom-right) ───────────────────────────────────────────
 .hordock-wrap { margin: 0 0 8px 66px; }
 
+// Leyenda fija (Oscar: los badges de una letra del dock no dicen el
+// modificador) - texto chico, sin caja, para no competir visualmente
+// con los íconos de abajo.
+.dockhint-label {
+    font-family: "Tektur", monospace; font-size: 10px; letter-spacing: 0.5px;
+    color: rgba(228, 50, 200, 0.75);
+}
+
 // ── panel de shortcuts (Mod+K) ────────────────────────────────────────────────
 // cyan/magenta (NEON.cyan/magenta de colors.ts), no el $red de las cards
 // del panel lateral - este widget sigue la paleta que se ve en el resto

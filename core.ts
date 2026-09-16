@@ -28,6 +28,7 @@ import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
 import { SidePanel, openCityModal, openForecastModal } from "./components/modules/sidepanel.ts"
 import { openTimeModal } from "./components/modules/timeset.ts"
 import { Toggles, HorizDock } from "./components/modules/dock.ts"
+import { DockHint } from "./components/modules/dockhint.ts"
 import { OsdWindow } from "./components/modules/osd.ts"
 import { NotifPopupWindow, notifReadCurrent, notifDismiss } from "./components/modules/notifpopup.ts"
 import { NotifHudWindow, toggleNotifHud, dismissAll, isDetailView } from "./components/modules/notifmessages.ts"
@@ -66,6 +67,7 @@ const WRAP_MARGINS: Record<string, [number, number, number, number]> = {
  monitors: [20, 0, 0, 20],
  sidepanel: [26, 28, 0, 0],
  toggles: [0, 0, 0, -5],
+ dockhint: [0, 0, 112, 66],
 }
 const surface = (mon, name, anchor, child, extra = {}) => {
  const S = scaleOf(mon)
@@ -347,6 +349,7 @@ App.start({
  { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
  { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
  { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
+ surface(mon, "dockhint", Anchor.BOTTOM | Anchor.LEFT, DockHint())
  { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
  }
  passthrough(OsdWindow())
