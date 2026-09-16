@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AGS_BIN="${HOME}/.local/bin/ags"
+THEME_DIR="${HOME}/.config/hypr/themes/cyberpunk"
+[ -f "$THEME_DIR/core.ts" ] || THEME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CORE_TS="$THEME_DIR/core.ts"
+
+[ -x "$AGS_BIN" ] || exit 1
+[ -f "$CORE_TS" ] || exit 1
+
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+display="${WAYLAND_DISPLAY:-}"
+
+if [ -z "$display" ] || [ ! -S "$runtime_dir/$display" ]; then
+    display=""
+    for socket in "$runtime_dir"/wayland-[0-9]*; do
+        [ -S "$socket" ] || continue
+        candidate="${socket##*/}"
+        [[ "$candidate" =~ ^wayland-[0-9]+$ ]] || continue
+        if command -v wlr-randr >/dev/null 2>&1; then
+            WAYLAND_DISPLAY="$candidate" XDG_RUNTIME_DIR="$runtime_dir" wlr-randr >/dev/null 2>&1 || continue
+        fi
+        display="$candidate"
+        break
+    done
+fi
+
+[ -n "$display" ] || exit 1
+
+exec env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$display" GDK_BACKEND=wayland \
+    "$AGS_BIN" run --gtk 3 "$CORE_TS" >/tmp/cyberhypr-debug.log 2>&1

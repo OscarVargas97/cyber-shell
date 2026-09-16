@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+
+# FIX FOR THE AWWW ISSUES
+## waits for the wayland socket, then starts awww daemon b4 setting the image
+set -u
+wallpapers_path="${HOME}/Pictures/Wallpapers"
+wallpaper_lua="${XDG_CONFIG_HOME:-${HOME}/.config}/cyberarch/wallpaper.lua"
+wallpaper="${wallpapers_path}/netwatch/lucy.mp4"
+if [ -r "$wallpaper_lua" ]; then
+    lua_wallpaper="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$wallpaper_lua" | tail -n 1)"
+    if [ -n "${lua_wallpaper:-}" ]; then
+        wallpaper="$lua_wallpaper"
+    fi
+fi
+if [ "$#" -ge 1 ] && [ -n "${1:-}" ]; then
+    wallpaper="$1"
+fi
+if [ ! -r "$wallpaper" ]; then
+    wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
+fi
+
+sddm_current="/usr/share/sddm/themes/netwatch/current"
+if [ -d "$sddm_current" ] && [ -w "$sddm_current" ] && [ -r "$wallpaper" ]; then
+    wp_ext="$(printf '%s' "${wallpaper##*.}" | tr '[:upper:]' '[:lower:]')"
+    case "$wallpaper" in
+        *.*) ;;
+        *) wp_ext="" ;;
+    esac
+    if [ -n "$wp_ext" ]; then
+        case "$wp_ext" in
+            mp4|webm|mkv|mov)
+                rm -f "$sddm_current"/image.* "$sddm_current"/video.* 2>/dev/null
+                cp -f "$wallpaper" "$sddm_current/video.$wp_ext" ;;
+            png|jpg|jpeg|webp|gif)
+                rm -f "$sddm_current"/image.* "$sddm_current"/video.* 2>/dev/null
+                cp -f "$wallpaper" "$sddm_current/image.$wp_ext" ;;
+        esac
+        chmod 644 "$sddm_current"/image.* "$sddm_current"/video.* 2>/dev/null
+    fi
+fi
+
+cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/awww"
+mkdir -p "$cache_dir"
+
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+find_compositor_socket() {
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "$runtime_dir/$WAYLAND_DISPLAY" ] && [[ "$WAYLAND_DISPLAY" =~ ^wayland-[0-9]+$ ]]; then
+        return 0
+    fi
+    unset WAYLAND_DISPLAY
+    for socket in "$runtime_dir"/wayland-[0-9]*; do
+        [ -S "$socket" ] || continue
+        candidate="${socket##*/}"
+        [[ "$candidate" =~ ^wayland-[0-9]+$ ]] || continue
+        if WAYLAND_DISPLAY="$candidate" wlr-randr >/dev/null 2>&1; then
+            export WAYLAND_DISPLAY="$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+compositor_ready=0
+if command -v wlr-randr >/dev/null 2>&1; then
+    for _ in $(seq 1 200); do
+        if find_compositor_socket && wlr-randr >/dev/null 2>&1; then
+            compositor_ready=1
+            break
+        fi
+        sleep 0.05
+    done
+else
+    for _ in $(seq 1 100); do
+        if find_compositor_socket; then
+            compositor_ready=1
+            break
+        fi
+        sleep 0.05
+    done
+fi
+
+if [ "$compositor_ready" -ne 1 ]; then
+    printf '%s\n' 'Wayland compositor did not become ready' >>"${HOME}/.cache/cyberpunk-awww.log"
+    exit 1
+fi
+
+case "${wallpaper##*.}" in
+    mp4|webm|mkv|mov)
+        if command -v mpvpaper >/dev/null 2>&1; then
+            old_mpvp="$(pgrep -x mpvpaper 2>/dev/null || true)"
+            old_awww="$(pgrep -x awww-daemon 2>/dev/null || true)"
+            sock="/tmp/cyberwall-$$.sock"
+            rm -f "$sock"
+            mpvpaper -o "no-audio --really-quiet --loop-file=inf --keepaspect=no --hwdec=auto-safe --gpu-shader-cache=no --input-ipc-server=$sock" ALL "$wallpaper" >>"${HOME}/.cache/cyberpunk-mpvpaper.log" 2>&1 &
+            new_pid=$!
+            if command -v socat >/dev/null 2>&1; then
+                for _ in $(seq 1 200); do
+                    [ -S "$sock" ] && printf '%s\n' '{ "command": ["get_property", "pause"] }' | timeout 1 socat - "$sock" >/dev/null 2>&1 && break
+                    sleep 0.05
+                done
+            else
+                sleep 2
+            fi
+            sleep 0.4
+            if kill -0 "$new_pid" 2>/dev/null; then
+                [ -n "$old_mpvp" ] && kill $old_mpvp 2>/dev/null
+                [ -n "$old_awww" ] && kill $old_awww 2>/dev/null
+                exit 0
+            fi
+            printf '%s\n' 'new mpvpaper died before rendering |::| keeping the previous wallpaper' >>"${HOME}/.cache/cyberpunk-mpvpaper.log"
+            exit 1
+        fi
+        printf '%s\n' 'mpvpaper not found |::| falling back to the static wallpaper' >>"${HOME}/.cache/cyberpunk-awww.log"
+        wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
+        ;;
+esac
+
+for _ in $(seq 1 80); do
+    if timeout 2 awww query >/dev/null 2>&1; then
+        if timeout 5 awww img --transition-type none "$wallpaper" >>"${HOME}/.cache/cyberpunk-awww.log" 2>&1; then
+            pkill -x mpvpaper 2>/dev/null
+            exit 0
+        fi
+        exit 1
+    fi
+
+    if ! pgrep -u "$(id -u)" -x awww-daemon >/dev/null 2>&1; then
+        awww-daemon --no-cache >>"${HOME}/.cache/cyberpunk-awww-daemon.log" 2>&1 &
+    fi
+    sleep 0.05
+done
+
+printf '%s\n' 'awww-daemon did not become ready' >>"${HOME}/.cache/cyberpunk-awww.log"
+exit 1
