@@ -287,6 +287,21 @@ $cyan:   rgba(94, 244, 248, 1);
 $cyan-d: rgba(94, 244, 248, 0.45);
 $magenta: rgba(228, 50, 200, 1);
 
+// Tooltips nativos de GTK (dock: qué combo corresponde a cada ícono,
+// query-tooltip en dock.ts) - sin esto salen con el estilo por defecto
+// del sistema (no tiene nada que ver con la paleta acá), producto del
+// "* { all: unset; }" de arriba que resetea todo lo que no se declara.
+tooltip {
+    background-color: rgba(6, 9, 14, 0.95);
+    border: 1px solid $cyan-d;
+    border-radius: 4px;
+    padding: 5px 9px;
+}
+tooltip label {
+    font-family: "Tektur", monospace; font-size: 11px;
+    color: $cyan;
+}
+
 .shortcuts-wrap {
     background-color: rgba(6, 9, 14, 0.94);
     border: 1px solid $cyan-d;

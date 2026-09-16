@@ -61,6 +61,24 @@ const HLAYOUT: { k: string; x: number; y: number; w: number; h: number }[] = [
 
 const tileOf = (k: string) => [...VERT_TILES, ...HORIZ_TILES].find(t => t.key === k)!
 
+// Tooltip nativo de GTK con el shortcut real de cada tile (pedido de
+// Oscar: se ve la letra en el badge pero no el modificador, y una
+// leyenda fija al lado del dock arruinaba la estética). Reusa `sc` -
+// la misma letra que ya dibuja drawBadgeBox - no hay una segunda lista
+// de combos que se pueda desincronizar de hyprland.nix. Solo aparece
+// al pasar el mouse (GTK decide dónde ponerlo, nunca se superpone).
+const attachDockTooltip = (evt: any, hitSlot: (x: number, y: number) => string | null, S: number) => {
+    try {
+        evt.set_has_tooltip(true)
+        evt.connect("query-tooltip", (_w: any, x: number, y: number, _kbd: boolean, tooltip: any) => {
+            const k = hitSlot(x / S, y / S)
+            if (!k) return false
+            tooltip.set_text(`SUPER + SHIFT + ${tileOf(k).sc}`)
+            return true
+        })
+    } catch {}
+}
+
 const eqBars = [0.3, 0.5, 0.4, 0.6, 0.45]
 let musicPlaying = false
 const drawEq = (ctx, plane, s, edge, alpha) => {
@@ -214,6 +232,7 @@ const VertDock = (mon?: any) => {
  const hover = makeHover(VLAYOUT, hv, () => hoverBus.key, area)
  hoverers.push(hover.kick)
  const evt = EventBox({ child: area })
+ attachDockTooltip(evt, hitSlot, S)
  let musicTap: any = null
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
  evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (!k) return false; if (k === "music") { let dbl = false; try { dbl = e.get_event_type() === Gdk.EventType.DOUBLE_BUTTON_PRESS } catch {} if (dbl) { if (musicTap) { musicTap.cancel(); musicTap = null } playPauseActive() } else { if (musicTap) musicTap.cancel(); musicTap = timeout(230, () => { musicTap = null; togglePlayer(); openRefresh() }) } } else if (k === "notification") { toggleNotifHud(); openRefresh() } else if (k === "rec") { sh(`${CYBER_DIR}/scripts/screenrecord`); openRefresh() } else { toggleModal(k); openRefresh() } return false })
@@ -267,6 +286,7 @@ const HorizDock = (mon?: any) => {
  const hover = makeHover(HLAYOUT, hv, () => hoverBus.key, area)
  hoverers.push(hover.kick)
  const evt = EventBox({ child: area })
+ attachDockTooltip(evt, hitSlot, S)
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
  evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (k) { if (k === "rec") sh(`${CYBER_DIR}/scripts/screenrecord`); else toggleModal(k); openRefresh() } return false })
  evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
