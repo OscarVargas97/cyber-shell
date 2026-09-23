@@ -1,6 +1,7 @@
 import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
@@ -381,6 +382,17 @@ export const AppsMenuWindow = () => {
       if (k === Gdk.KEY_Down) { scrollTarget += 1; const n = filtered.length; if (n <= VISIBLE) scrollTarget = Math.min(n - 1, scrollTarget); beep(); animate(); return true }
      if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { if (wheelCfg.onSubmit) { wheelCfg.onSubmit(query); return true } if (n) activate(filtered[mod(Math.round(scroll), n)]); return true }
      if (k === Gdk.KEY_BackSpace) { if (wheelCfg.searchable && query) { query = query.slice(0, -1); applyFilter() } return true }
+
+     // drawRow ya dibuja "1".."9"/"0" junto a cada fila visible (RENDER
+     // guarda qué entrada le corresponde a cada número) - acá faltaba la
+     // tecla en sí. Solo mientras no hay búsqueda escrita: una vez que se
+     // tipea algo, los dígitos vuelven a ser texto de búsqueda (ej. "1password").
+     if (!query && !wheelCfg.masked && k >= Gdk.KEY_0 && k <= Gdk.KEY_9) {
+         const digit = k - Gdk.KEY_0
+         const wantNum = digit === 0 ? 10 : digit
+         const row = RENDER.find((r) => r.num === wantNum)
+         if (row) { activate(row.entry); return true }
+     }
 
      const uni = Gdk.keyval_to_unicode(k)
      if (wheelCfg.searchable && uni >= 32 && uni < 0x10000) { query += String.fromCharCode(uni); applyFilter(); return true }

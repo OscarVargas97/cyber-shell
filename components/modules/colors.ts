@@ -1,6 +1,6 @@
 import GLib from "gi://GLib"
 import GdkPixbufLib from "gi://Gdk?version=3.0"
-import { execAsync } from "astal"
+import { execAsync } from "ags/process"
 import { applyWmFromTheme } from "./wmconfig.ts"
 import { CYBER_DIR, USER_DIR } from "../../env.ts"
 
@@ -120,7 +120,6 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [255, 255, 255],
         glassacc: [196, 248, 255],
         overlay: [255, 42, 58],
-        sysveil: [255, 42, 58],
     },
     // replaced the old dark theme. dusk amber/rust base, pink/purple only on
     // notifications and toasts, terminal interfaces in cyan/teal
@@ -163,37 +162,36 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         notifphone: [187, 56, 160],
         notifmail: [187, 56, 160],
         notifbg: [13, 66, 72],
-        sysveil: [187, 56, 160],
+        sysveil: [183, 81, 7],
     },
     KITTY: {
-        red: [255, 20, 147], cyan: [255, 105, 190], magenta: [255, 0, 128],
-        green: [255, 130, 200], amber: [255, 75, 170], blue: [255, 95, 185],
-        white: [255, 235, 248], dim: [180, 60, 125], grid: [60, 12, 40],
-        dock: [255, 20, 147], press: [255, 45, 160], badge: [255, 20, 147],
-        stamina: [255, 130, 200], ram: [255, 95, 185], netinfo: [255, 20, 147],
-        cpu: [255, 20, 147],
-        notifred: [255, 20, 147],
-        notifyel: [255, 75, 170],
-        notifcyn: [255, 105, 190],
-        goldf: [120, 25, 80],
-        goldd: [70, 12, 48],
-        notifgrey: [255, 235, 248],
-        glyphcol: [255, 20, 147],
-        msggrey: [180, 60, 125],
-        dimred: [255, 20, 147],
-        appsred: [255, 20, 147],
-        hudcyan: [255, 105, 190],
-        darkred: [255, 20, 147],
-        notifbadge: [255, 20, 147],
-        aurgreen: [255, 130, 200],
-        aurbrt: [255, 235, 248],
-        aurblack: [60, 12, 40],
-        aurwht: [255, 235, 248],
-        f25: [255, 20, 147],
-        pure: [255, 235, 248],
-        glassacc: [255, 235, 248],
-        overlay: [255, 20, 147],
-        sysveil: [255, 20, 147],
+        red: [255, 170, 215], cyan: [255, 200, 232], magenta: [255, 180, 222],
+        green: [255, 205, 236], amber: [255, 206, 230], blue: [255, 195, 228],
+        white: [255, 248, 252], dim: [222, 180, 205], grid: [50, 30, 44],
+        dock: [255, 170, 215], press: [255, 190, 226], badge: [255, 182, 222],
+        stamina: [255, 205, 236], ram: [255, 195, 228], netinfo: [255, 180, 222],
+        cpu: [255, 170, 215],
+        notifred: [255, 170, 215],
+        notifyel: [255, 206, 230],
+        notifcyn: [255, 170, 215],
+        goldf: [92, 60, 76],
+        goldd: [56, 36, 47],
+        notifgrey: [255, 248, 252],
+        glyphcol: [255, 170, 215],
+        msggrey: [222, 180, 205],
+        dimred: [255, 170, 215],
+        appsred: [255, 170, 215],
+        hudcyan: [255, 182, 222],
+        darkred: [255, 170, 215],
+        notifbadge: [255, 182, 222],
+        aurgreen: [255, 205, 236],
+        aurbrt: [255, 248, 252],
+        aurblack: [50, 30, 44],
+        aurwht: [255, 248, 252],
+        f25: [255, 170, 215],
+        pure: [255, 248, 252],
+        glassacc: [255, 248, 252],
+        overlay: [255, 180, 222],
     },
     BLOODMOON: {
         red: [255, 32, 32], cyan: [255, 60, 60], magenta: [255, 40, 60],
@@ -223,7 +221,6 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [255, 210, 205],
         glassacc: [255, 210, 205],
         overlay: [255, 32, 32],
-        sysveil: [255, 32, 32],
     },
     ARCTIC: {
         red: [255, 255, 255], cyan: [210, 245, 255], magenta: [255, 255, 255],
@@ -253,7 +250,6 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [255, 255, 255],
         glassacc: [255, 255, 255],
         overlay: [255, 255, 255],
-        sysveil: [255, 255, 255],
     },
     SYNTHWAVE: {
         red: [255, 45, 150], cyan: [45, 220, 210], magenta: [230, 60, 220],
@@ -283,7 +279,6 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [250, 232, 250],
         glassacc: [80, 255, 140],
         overlay: [255, 60, 190],
-        sysveil: [255, 60, 190],
     },
     JOHNNY: {
         red: [255, 208, 60], cyan: [94, 244, 248], magenta: [110, 90, 220],
@@ -313,7 +308,6 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [250, 246, 228],
         glassacc: [250, 246, 228],
         overlay: [255, 208, 60],
-        sysveil: [255, 208, 60],
     },
     GHOST: {
         red: [0, 255, 120], cyan: [40, 255, 140], magenta: [40, 200, 120],
@@ -343,7 +337,6 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [200, 255, 220],
         glassacc: [200, 255, 220],
         overlay: [0, 255, 120],
-        sysveil: [0, 255, 120],
     },
 }
 
@@ -414,7 +407,7 @@ export const imgTint = { value: null as RGB | null, strength: 0 }
 const IMG_TINT: Record<string, [RGB, number]> = {
     ARCTIC: [[255, 255, 255], 1],
     BLADE: [[81, 37, 11], 0.62],
-    KITTY: [[255, 20, 147], 0.8],
+    KITTY: [[255, 180, 222], 0.8],
     JOHNNY: [[255, 208, 60], 0.85],
     BLOODMOON: [[255, 32, 32], 0.9],
     GHOST: [[0, 255, 120], 0.88],
@@ -490,7 +483,7 @@ const MENU_BG_DEF: MenuBg = { bg: [2, 1, 4], bgA: 0.5, fog: [255, 42, 58], fogA:
 const MENU_BG: Record<string, MenuBg> = {
     NETWATCH: { bg: [2, 1, 4], bgA: 0.5, fog: [255, 42, 58], fogA: 0.18 },
     ARCTIC: { bg: [2, 1, 4], bgA: 0.42, fog: [255, 255, 255], fogA: 0.18 },
-    KITTY: { bg: [16, 6, 12], bgA: 0.5, fog: [255, 20, 147], fogA: 0.2 },
+    KITTY: { bg: [16, 6, 12], bgA: 0.5, fog: [255, 185, 224], fogA: 0.2 },
     JOHNNY: { bg: [2, 4, 10], bgA: 0.5, fog: [255, 208, 60], fogA: 0.18 },
     BLADE: { bg: [3, 2, 2], bgA: 0.55, fog: [128, 33, 122], fogA: 0.26 },
     BLOODMOON: { bg: [6, 0, 0], bgA: 0.5, fog: [255, 32, 32], fogA: 0.2 },
@@ -507,7 +500,7 @@ type MapAccent = { clock: RGB; city: RGB; forecast: RGB | null }
 const MAP_ACCENT_DEF: MapAccent = { clock: [130, 231, 215], city: [176, 255, 157], forecast: null }
 const MAP_ACCENT: Record<string, MapAccent> = {
     ARCTIC: { clock: [255, 255, 255], city: [130, 220, 255], forecast: null },
-    KITTY: { clock: [255, 20, 147], city: [255, 105, 190], forecast: [255, 20, 147] },
+    KITTY: { clock: [255, 182, 222], city: [255, 205, 236], forecast: [255, 180, 222] },
     SYNTHWAVE: { clock: [255, 60, 220], city: [100, 255, 170], forecast: [255, 60, 220] },
     JOHNNY: { clock: [255, 208, 60], city: [176, 255, 157], forecast: null },
     BLADE: { clock: [189, 128, 59], city: [2, 155, 156], forecast: [1, 180, 178] },
@@ -527,7 +520,7 @@ type RGB01 = [number, number, number]
 type HudSoft = { acc: RGB01; label: RGB01 }
 const HUD_SOFT: Record<string, HudSoft> = {
     ARCTIC: { acc: [1, 1, 1], label: [1, 1, 1] },
-    KITTY: { acc: [1, 0.0784, 0.5765], label: [1, 0.4118, 0.7451] },
+    KITTY: { acc: [1, 0.6667, 0.8431], label: [1, 0.7451, 0.8824] },
     BLADE: { acc: [0.004, 0.707, 0.698], label: [0.325, 0.878, 0.871] },
 }
 export const hudSoft = { acc: [1, 1, 1] as RGB01, label: [1, 1, 1] as RGB01 }

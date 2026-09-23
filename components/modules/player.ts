@@ -1,6 +1,7 @@
 import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Pango from "gi://Pango?version=1.0"

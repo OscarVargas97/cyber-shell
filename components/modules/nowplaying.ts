@@ -1,6 +1,6 @@
 import { Window, Box, DrawingArea, App } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval, timeout } from "astal"
+import { interval, timeout } from "ags/time"
 import AstalMpris from "gi://AstalMpris"
 import { NEON, f, onColorChange } from "./colors.ts"
 import { makePlane, tiltText, strokePath, fillQuad } from "./proj.ts"

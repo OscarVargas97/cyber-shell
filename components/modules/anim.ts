@@ -1,6 +1,7 @@
 import { App, Window, Box, DrawingArea, activeMonitor, monitorAtPoint } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, SCALE, winScale, monW, monH, scaleOf } from "../../env.ts"
 import { NEON, f, RGB, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 import { makePlane, tiltText, fillQuad } from "./proj.ts"

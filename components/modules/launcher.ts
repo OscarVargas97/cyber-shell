@@ -2,7 +2,7 @@ import { Window, Box, DrawingArea, EventBox } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
-import { interval } from "astal"
+import { interval } from "ags/time"
 import { CYBER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, f, onColorChange, imgTint, tintSurface, neonBtn, launcherTint, launcherLabelTint } from "./colors.ts"
@@ -15,7 +15,10 @@ const plane = makePlane({ w: W, h: H, yaw: -16, pitch: 1, roll: 4, focal: 1180, 
 const prompt = makePlane({ w: W, h: 14, yaw: -14, pitch: -1.5, roll: 2.5, focal: 1180, dist: 1180, pad: 5 })
 
 let ICON: any = null
-try { ICON = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/launcher.png`) } catch (e) { print("[launcher] launcher.png:", e) }
+// launcher.png es 3456x2432 y se dibuja a ~160x100: a tamaño completo cada
+// cairo_set_source_pixbuf crea una superficie de ~33 MB, y con hover (flip cada
+// 110 ms) gjs llegaba a ~300 MB/s de basura (picos de 2.9 GB, 60% CPU).
+try { ICON = GdkPixbuf.Pixbuf.new_from_file_at_scale(`${CYBER_DIR}/assets/icons/launcher.png`, 480, -1, true) } catch (e) { print("[launcher] launcher.png:", e) }
 
 export const LauncherWindow = (mon?) => {
  const S = scaleOf(mon)

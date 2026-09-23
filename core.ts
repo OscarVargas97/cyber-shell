@@ -13,17 +13,19 @@
 
 import { App, Window, Box } from "./components/modules/widget.ts"
 import { Anchor, Layer, Exclusivity } from "./components/modules/widget.ts"
-import { execAsync, timeout, interval } from "astal"
+import { execAsync } from "ags/process"
+import { timeout, interval } from "ags/time"
 import AstalNotifd from "gi://AstalNotifd"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
-import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf } from "./env.ts"
+import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf, USER_DIR } from "./env.ts"
 import { loadUserColors } from "./components/modules/colors.ts"
 import { applyWmRules, applyWmFromTheme } from "./components/modules/wmconfig.ts"
+import { applyPerfPreset, PERF_PRESETS } from "./components/modules/config.ts"
+import { ShortcutsWindow, toggleShortcuts } from "./components/modules/shortcuts.ts"
 import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
 import { SidePanel, openCityModal, openForecastModal } from "./components/modules/sidepanel.ts"
-import { MarketsPanel, openMarketsModal } from "./components/modules/markets.ts"
 import { openTimeModal } from "./components/modules/timeset.ts"
 import { Toggles, HorizDock } from "./components/modules/dock.ts"
 import { OsdWindow } from "./components/modules/osd.ts"
@@ -37,7 +39,7 @@ import {
 import { RegionWindow, triggerRegion, triggerRecordRegion } from "./components/modules/region.ts"
 import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
-import { CModalWindows, toggleModal, ThemeSettingsWindow } from "./components/modules/cmodal.ts"
+import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
 import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled } from "./components/modules/aurbar.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
@@ -46,7 +48,9 @@ import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
 import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
 
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
-const CSS = `${COMPONENTS_DIR}/style/cyber.css`
+// CYBER_DIR/COMPONENTS_DIR viven en el store de Nix (solo lectura) - el
+// css compilado va a USER_DIR (~/.config/cyberarch), que es escribible.
+const CSS = `${USER_DIR}/cyber.css`
 
 const compileCss = async () => {
  try {
@@ -142,17 +146,16 @@ const surfaceRect = (win) => {
 const applyHudInput = (win) => {
  try {
  const gw = win.get_window?.(); if (!gw) return
- if (hudOnTop) {
- const aw = win.get_allocated_width?.() || 0, ah = win.get_allocated_height?.() || 0
- if (aw > 0 && ah > 0) {
- const full = new Cairo.Region()
- full.unionRectangle({ x: 0, y: 0, width: aw, height: ah })
- gw.input_shape_combine_region(full, 0, 0)
- }
- return
- }
- const r = shapedRegion(win, !!(win as any)._rectHit)
- gw.input_shape_combine_region(r || null, 0, 0)
+ // shapedRegion() redibuja el widget a mano en una superficie offscreen
+ // para recortar el hitbox a los pixeles no transparentes (permite
+ // click-through en zonas vacias). Ese truco depende de win.draw()
+ // funcionando fuera del ciclo normal de refresco - poco confiable en
+ // GTK3+Wayland (a diferencia de X11, donde se origino esta lib) y
+ // termina dejando toda la ventana sin poder recibir clicks. Se
+ // resetea a null: hit-test default, todo el rectangulo es clickeable
+ // (se pierde el click-through en zonas transparentes, no el click en
+ // los botones reales).
+ gw.input_shape_combine_region(null, 0, 0)
 } catch {}
 }
 const applyHudInputAll = () => { for (const w of hudWins) deferShape(w) }
@@ -230,10 +233,14 @@ const toggleHudTop = () => {
 
 App.start({
  instanceName: "cyberpunk",
- requestHandler(request, res) {
+ requestHandler(argv, res) {
+ // ags v3.1 pasa argv: string[] (uno por arg de "ags request cyberpunk a b c"),
+ // la lib vieja pasaba un string ya unido - se rearma para no tocar
+ // toda la logica de abajo (startsWith/slice sobre un solo string).
+ const request = argv.join(" ")
  const reply = (r) => { try { res(r) } catch {} }
  if (request === "launcher") {
- execAsync(["sh", "-c", "rofi -show drun || rofi -show run"]).catch(print)
+ execAsync(["sh", "-c", "wofi --show drun"]).catch(print)
  reply("ok")
  } else if (request === "apps-menu") {
  try { openAppsMenu() } catch (e) { print(e) }
@@ -282,6 +289,9 @@ App.start({
  } else if (request === "record-stop") {
  try { setRecording(false) } catch (e) { print(e) }
  reply("ok")
+ } else if (request === "shortcuts") {
+ try { toggleShortcuts() } catch (e) { print(e) }
+ reply("ok")
  } else if (request === "toggle-hud") {
  try {
 
@@ -293,6 +303,12 @@ App.start({
  } else if (request.startsWith("toast")) {
  try { showToast(request.slice(5).trim() || undefined) } catch (e) { print(e) }
  reply("ok")
+ } else if (request.startsWith("perf ")) {
+ try {
+ const applied = applyPerfPreset(request.slice(5).trim())
+ showToast(applied ? `PERF: ${applied.toUpperCase()}` : `PERF: ?? (usar ${PERF_PRESETS.join("/")})`)
+ } catch (e) { print(e) }
+ reply("ok")
  } else if (request === "weather") {
  try { openCityModal() } catch (e) { print(e) }
  reply("ok")
@@ -301,9 +317,6 @@ App.start({
  reply("ok")
  } else if (request === "clock") {
  try { openTimeModal() } catch (e) { print(e) }
- reply("ok")
- } else if (request === "markets") {
- try { openMarketsModal() } catch (e) { print(e) }
  reply("ok")
  } else if (request === "aur-dismiss") {
  try { dismissAurBar() } catch (e) { print(e) }
@@ -332,7 +345,6 @@ App.start({
  const S = scaleOf(mon)
  surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon))
  { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
- { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true }
  { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
  { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
  { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
@@ -340,6 +352,7 @@ App.start({
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
  passthrough(AurBarWindow())
+ ShortcutsWindow()
  NotifHudWindow()
  NowPlayingWindow()
  WsAnimWindow()
@@ -350,7 +363,6 @@ App.start({
  RegionWindow()
  ToastWindow()
  CModalWindows()
- ThemeSettingsWindow()
  AppsMenuWindow()
  PlayerWindow()
  registerHudWindows(hudWins)

@@ -4,7 +4,8 @@ import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
 import { Layer, Exclusivity, Keymode } from "./widget.ts"
 
 const SS_DEFAULT = 1
-import { execAsync, interval, timeout } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT, SCALE, winScale, monW } from "../../env.ts"
@@ -17,8 +18,7 @@ import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
 import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar, getThemeUpdate, cachedThemeUpdate, startThemeUpdate, dismissThemeBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
-import { ThemesWindow, toggleThemeSettings } from "./themesettings.ts"
-import { ThemeSettingsCtrl } from "./themesettings_ctrl.ts"
+import { ThemesCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
 
@@ -99,14 +99,10 @@ export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, co
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
-// toggle w/ scale
-export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = CYAN, sc = 1, onCol: any = null) => {
-    const bw = Math.round(42*sc), bh = Math.round(16 *sc)
-      const key = `tg|${bx}|${by}`
+export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = CYAN) => {
+    const bw = 42, bh = 16, key = `tg|${bx}|${by}`
     const hovered = !dis && push.hoverKey === key
-    let usecol = col
-    if (val && onCol) usecol = onCol   // on color override
-    const base = dis ? [0.5, 0.54, 0.58] : hovered ? HL : (neonBtn.value ? USER.press : usecol)
+    const base = dis ? [0.5, 0.54, 0.58] : hovered ? HL : (neonBtn.value ? USER.press : col)
     const c = val && !dis ? base : [base[0] * 0.62, base[1] * 0.62, base[2] * 0.62]
     const a = dis ? 0.45 : 1
     btnPath(ctx, bx, by, bw, bh)
@@ -117,16 +113,14 @@ export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = C
         ctx.setOperator(2)
     }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], (hovered ? 1 : 0.8) * a); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
-    const kw = Math.round(17*sc)   // knob
-      const kx = val ? bx + bw - kw - 2 : bx + 2
-    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5*sc, kw, bh - 5*sc); ctx.fill()
-    ctx.selectFontFace(TITLE, 0, 1)
-    ctx.setFontSize(Math.round(8*sc))
+    const kw = 17, kx = val ? bx + bw - kw - 2 : bx + 2
+    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5, kw, bh - 5); ctx.fill()
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(8)
     const lbl = val ? "ON" : "OFF"
     const tw = ctx.textExtents(lbl).width
     const cx = val ? bx + (bw - kw - 2) / 2 : bx + kw + 2 + (bw - kw - 4) / 2
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 1 : 0.72) * a)
-    ctx.moveTo(cx - tw / 2, by + bh/2 + 3*sc); ctx.showText(lbl)
+    ctx.moveTo(cx - tw / 2, by + bh / 2 + 3); ctx.showText(lbl)
     if (!dis) push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
@@ -328,9 +322,9 @@ export const createModal = (spec) => {
 }
 
 
-export const sectionHeader = (ctx, g, x, y, label, w, fs=9) => {
-    txt(ctx, x, y, label, MONO, fs, g.col, 0.85)
-      ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(fs)
+export const sectionHeader = (ctx, g, x, y, label, w) => {
+    txt(ctx, x, y, label, MONO, 9, g.col, 0.85)
+    ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
     const lw = ctx.textExtents(label).width
     ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(x + lw + 10, y - 3, (x + w) - (x + lw + 10), 1.2); ctx.fill()
 }
@@ -340,9 +334,9 @@ const SRC_OUTS_CMD = `pactl list source-outputs 2>/dev/null | awk '/^Source Outp
 
 const APPVOL_STATE = `$HOME/.cache/cyberpunk/appvol.conf`
 const APPVOL_STATE_SRC = `$HOME/.cache/cyberpunk/appvol_src.conf`
-const shq = (s) => String(s).replace(/'/g, `'\\''`)
+const shqSingle = (s) => String(s).replace(/'/g, `'\\''`)
 const setAppVol = (name, id, t) => {
-    const pct = Math.round(t * 100), nm = shq(name)
+    const pct = Math.round(t * 100), nm = shqSingle(name)
     sh(`f="${APPVOL_STATE}"; mkdir -p "$(dirname "$f")"; touch "$f"; awk -F= -v n='${nm}' -v v='${pct}' 'BEGIN{s=0}$1==n{print n"="v;s=1;next}{print}END{if(!s)print n"="v}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; pactl set-sink-input-volume ${id} ${pct}%`)
 }
 
@@ -369,7 +363,7 @@ const setDevVol = (kind, id, t) => {
     sh(kind === "sink" ? SINK_VOL_SET(id, pct) : SRC_VOL_SET(id, pct))
 }
 const setAppVolSrc = (name, id, t) => {
-    const pct = Math.round(t * 100), nm = shq(name)
+    const pct = Math.round(t * 100), nm = shqSingle(name)
     sh(`f="${APPVOL_STATE_SRC}"; mkdir -p "$(dirname "$f")"; touch "$f"; awk -F= -v n='${nm}' -v v='${pct}' 'BEGIN{s=0}$1==n{print n"="v;s=1;next}{print}END{if(!s)print n"="v}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; pactl set-source-output-volume ${id} ${pct}%`)
 }
 
@@ -744,19 +738,12 @@ const drawMenu = (ctx, push, fx, fy, items, onDismiss, X, Y, W, H) => {
 const WifiCtrl = () => {
     const st: any = { on: false, nets: [], saved: [], selected: null }
     let ctrl
-    const shq = (s) => s.replace(/[\\"$`]/g, "\\$&")
+    const shqDouble = (s) => s.replace(/[\\"$`]/g, "\\$&")
     const refresh = () => sh("nmcli radio wifi 2>/dev/null").then((o) => {
         st.on = /enabled/i.test(o)
         if (!st.on) { st.nets = []; if (ctrl.isOpen() && !pwMode) updateWheel([]); ctrl.requestDraw(); return }
         sh("nmcli -t -f ACTIVE,SSID,SECURITY,SIGNAL dev wifi 2>/dev/null | awk -F: 'NF>=3 && $2!=\"\"' | head -80").then((l) => {
-            const raw = l.trim().split("\n").filter(Boolean).map((line) => {
-              const cols = line.split(":")
-                const wifi_ssid = cols[1]
-              let secfield = (cols[2] || "").trim()
-                const hasKey = secfield != "" && secfield != "--"
-              const sigval = parseInt(cols[cols.length - 1]) || 0
-                return { active: cols[0] === "yes", ssid: wifi_ssid, sec: hasKey, sig: sigval }
-            })
+            const raw = l.trim().split("\n").filter(Boolean).map((line) => { const p = line.split(":"); return { active: p[0] === "yes", ssid: p[1], sec: p.length >= 4, sig: parseInt(p[p.length - 1]) || 0 } })
             const by = new Map()
             for (const n of raw) { const e = by.get(n.ssid); if (!e) by.set(n.ssid, { ...n }); else { e.active = e.active || n.active; e.sig = Math.max(e.sig, n.sig) } }
             st.nets = [...by.values()].sort((a, b) => (Number(b.active) - Number(a.active)) || (b.sig - a.sig))
@@ -778,7 +765,7 @@ const WifiCtrl = () => {
             onSubmit: (pw) => {
                 if (!pw) return
                 closeWheel()
-                sh(`nmcli dev wifi connect "${shq(n.ssid)}" password "${shq(pw)}" 2>/dev/null && echo OK`).then((o) => {
+                sh(`nmcli dev wifi connect "${shqDouble(n.ssid)}" password "${shqDouble(pw)}" 2>/dev/null && echo OK`).then((o) => {
                     if (o && o.includes("OK")) timeout(1200, refresh)
                     else askPassword(n, true)
                 })
@@ -789,7 +776,7 @@ const WifiCtrl = () => {
     const tryConnect = (n) => {
         if (!n || n.active) return
         if (n.sec && !st.saved.some((s) => s === n.ssid)) { askPassword(n, false); return }
-        sh(`nmcli dev wifi connect "${shq(n.ssid)}" 2>/dev/null && echo OK`).then((o) => {
+        sh(`nmcli dev wifi connect "${shqDouble(n.ssid)}" 2>/dev/null && echo OK`).then((o) => {
             if (o && o.includes("OK")) timeout(1200, refresh)
             else if (n.sec) askPassword(n, true)
             else timeout(1200, refresh)
@@ -818,7 +805,7 @@ const WifiCtrl = () => {
                 const btnH = 24, gap = 8
                 const isActive = st.selected.active
                 drawBtn(ctx, g.push, px, ty, 130, btnH, isActive ? "DISCONNECT" : "CONNECT",
-                    () => isActive ? sh(`nmcli con down id "${shq(st.selected.ssid)}"`).then(() => timeout(1200, refresh)) : tryConnect(st.selected),
+                    () => isActive ? sh(`nmcli con down id "${shqDouble(st.selected.ssid)}"`).then(() => timeout(1200, refresh)) : tryConnect(st.selected),
                     false, g.col)
                 const forgetW = panelW - 28 - 130 - gap
                 const isSaved = st.saved.some((s) => s === st.selected.ssid)
@@ -1602,14 +1589,13 @@ fi`).then(() => timeout(200, fetchInitApps))
 }
 const KEYBINDS = [
     ["SUPER + TAB", "APP LAUNCHER"], ["H", "HELP MENU"], ["Z", "HUD OVERLAY"], ["V", "VOLUME"],
-    ["I", "BRIGHTNESS"], ["U", "SYSTEM UPGRADE"], ["J", "DISMISS UPDATE"], ["Q", "CYBERARCH UPDATE"], ["M", "MICROPHONE"],["G", "MARKETS"], ["O", "MUSIC PLAYER"], ["N", "NETWORKS"],
+    ["I", "BRIGHTNESS"], ["U", "SYSTEM UPGRADE"], ["J", "DISMISS UPDATE"], ["Q", "CYBERARCH UPDATE"], ["M", "MICROPHONE"],["O", "MUSIC PLAYER"], ["N", "NETWORKS"],
     ["B", "BLUETOOTH"], ["W", "FORECAST"], ["P", "POWER MENU"], ["Y", "BATTERY"],
     ["C", "CPU / RAM"], ["L", "LOCKSCREEN"], ["R", "SCREEN RECORD"], ["S", "SCREENSHOT"],
     ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], 
 ]
-export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number; col?: any } = {}) => {
-    let kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
-      if (opts.col) kc = opts.col
+export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number } = {}) => {
+    const kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
     const fillA = opts.glow ? 0.45 : (opts.muted ? 0.18 : 0.55)
     const strokeA = opts.glow ? 1.0 : (opts.muted ? 0.4 : 0.85)
     const txtA = opts.muted ? 0.55 : 0.97
@@ -1849,15 +1835,8 @@ const sysGet = () => {
   }
   return sysInst
 }
-export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemeSettingsCtrl())]
-export const ThemeSettingsWindow = () => ThemesWindow()
+export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemesCtrl())]
 
-
-export const closeAllModals = () => {
-  for (const k in cregistry) {
-      try { cregistry[k].close() } catch(e) { }
-  }
-}
 
 export const toggleModal = (name) => {
     if (name === "mic") name = "vol"

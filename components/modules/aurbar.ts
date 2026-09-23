@@ -3,7 +3,8 @@
 
 import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval, timeout, execAsync } from "astal"
+import { execAsync } from "ags/process"
+import { interval, timeout } from "ags/time"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import { CYBER_DIR, USER_DIR, SCALE, winScale } from "../../env.ts"

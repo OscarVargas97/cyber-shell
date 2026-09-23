@@ -8,7 +8,8 @@
 
 
 import { Box, DrawingArea, EventBox } from "./widget.ts"
-import { interval, Variable } from "astal"
+import { interval } from "ags/time"
+import { Variable } from "./compat.ts"
 import { buildStats } from "./sys.ts"
 import { scaleOf } from "../../env.ts"
 import { makePlane, fillQuad, tiltText } from "./proj.ts"

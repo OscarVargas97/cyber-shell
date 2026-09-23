@@ -1,7 +1,7 @@
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
-import { execAsync } from "astal"
+import { execAsync } from "ags/process"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, Cairo, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"
 import { USER } from "./colors.ts"

@@ -1,21 +1,19 @@
-import { execAsync, timeout, Variable } from "astal"
+import { execAsync } from "ags/process"
+import { timeout } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import GLib from "gi://GLib"
-import Gio from "gi://Gio"
-import GdkPixbuf from "gi://GdkPixbuf"
-import { Window, DrawingArea, EventBox, Keymode, Layer, Anchor } from "./widget.ts"
-import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha, USER, onColorChange } from "./colors.ts"
-import { closeAllModals } from "./cmodal.ts"
-import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
-import { ICONF } from "./fonts.ts"
-import { drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
+import { Keymode } from "./widget.ts"
+import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha } from "./colors.ts"
+import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo } from "./glass.ts"
+import { createModal, drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL } from "./config.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
 } from "./wmconfig.ts"
-import { USER_DIR, CYBER_DIR, WALLPAPERS_PATH, WALLPAPER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { USER_DIR, CYBER_DIR } from "../../env.ts"
+import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
 import {
     readUserLua, readThemeActions, resolveCombo, checkConflict, ensureRebind, removeRebind,
     addCustom, removeCustom, updateCustomCombo, reloadHyprland, themeModDefault, setThemeMod,
@@ -31,20 +29,13 @@ const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 // themeMod is modifiers only so that one saves when u let go, not on a press
 const grabKeys = () => sh(`hyprctl dispatch 'hl.dsp.submap("cyberdeck_capture")'`)
 const releaseKeys = () => sh(`hyprctl dispatch 'hl.dsp.submap("reset")'`)
-export let selPalette = "NETWATCH"
+let selPalette = "NETWATCH"
 
-export const readTune = () => {
-    selPalette = getPaletteName()
-    wallPickerOpen = false
-    wallPickerSel = null
-    wallPickerEntries = []
-    wallOpen = null
-    wallScroll = 0
-}
+const readTune = () => { selPalette = getPaletteName() }
 
-export const applyColors = (name: string) => { closeAllModals(); applyPalette(name); saveUserColors(); selPalette = name; sh(`"${CYBER_DIR}/scripts/theme-wallpaper" "${name}"`) }
+const applyColors = (name: string) => { applyPalette(name); saveUserColors(); selPalette = name; sh(`"${CYBER_DIR}/scripts/theme-wallpaper" "${name}"`) }
 
-export const TABS: [string, string][] = [
+const TABS: [string, string][] = [
     ["CONFIGURATION", "anim"], ["COLORS", "colors"], ["KEYBINDS", "keybinds"],
     ["WINDOW MANAGEMENT", "wm"], ["WALLPAPER", "wall"],
 ]
@@ -55,262 +46,109 @@ let ctrl: any = null
 const wheelEntries = () =>
     TABS.map(([label, id]) => ({ label, badge: TAB_BADGE[id] ?? "", glyph: null, data: id }))
 
-const drawTabBar = (ctx, g, x, y, w) => {
-    const totalTabs = TABS.length
-    const tabSpacing = 150
-    const totalWidth = totalTabs * tabSpacing
-    const startX = (w - totalWidth) / 2 + x
-    const tabY = y + 20
-    const currentIdx = TABS.findIndex(t => t[1] === tab)
-
-    // Draw navigation indicators
-    txt(ctx, startX - 60, tabY, "[1]", MONO, 13, g.accent, 0.5)
-    txt(ctx, startX - 30, tabY, "<", MONO, 14.5, g.accent, 0.6)
-
-    TABS.forEach(([label, id], i) => {
-        const tx = startX + i * tabSpacing
-        const isActive = tab === id
-
-        // Draw tab label
-        const col = isActive ? (USER.cyan as any) : g.accent
-        const alpha = isActive ? 1 : 0.65
-        txt(ctx, tx, tabY, label, TITLE, 13, col, alpha)
-
-        // Draw underline for active tab
-        if (isActive) {
-            ctx.setSourceRGBA(USER.cyan[0], USER.cyan[1], USER.cyan[2], 0.9)
-            ctx.setLineWidth(2)
-            ctx.newPath()
-            const labelWidth = ctx.textExtents(label).width + 20
-            ctx.moveTo(tx - 10, tabY + 11)
-            ctx.lineTo(tx + labelWidth, tabY + 11)
-            ctx.stroke()
-        }
-
-        // Register click area
-        const labelWidth = ctx.textExtents(label).width + 20
-        g.push({
-            kind: "tab", key: `tab_${id}`, hoverable: true,
-            bx0: tx - 10, by0: tabY - 20, bx1: Math.min(tx + labelWidth, startX + (i + 1) * tabSpacing - 8), by1: tabY + 16,
-            on: () => {
-                if (tab !== id) {
-                    tab = id
-                    kbScroll = 0
-                    cfgOpen = null
-                    if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-                    area?.queue_draw()
-                }
-            }
-        })
-    })
-
-    txt(ctx, startX + totalWidth + 30, tabY, ">", MONO, 14.5, g.accent, 0.6)
-    txt(ctx, startX + totalWidth + 60, tabY, `[${totalTabs}]`, MONO, 13, g.accent, 0.5)
-
-    // Draw separator line below tabs
-    ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.3)
-    ctx.setLineWidth(1)
-    ctx.newPath()
-    ctx.moveTo(x + 40, tabY + 26)
-    ctx.lineTo(x + w - 40, tabY + 26)
-    ctx.stroke()
-}
-
-const visible = Variable(false)
-export let area: any = null
-let mouseX = 0
-let mouseY = 0
-let hoverKey = ""
-let clickTargets: any[] = []
-
-const pushHandler = (item: any) => {
-    if (item.hoverable && item.bx0 !== undefined) {
-        clickTargets.push(item)
-    }
-}
-
-export const ThemesWindow = () => {
-    readTune()
-
-    const handleMotion = (self: any, event: Gdk.EventMotion) => {
-        mouseX = event.x
-        mouseY = event.y
-        let newHover = ""
-        for (const t of clickTargets) {
-            if (mouseX >= t.bx0 && mouseX <= t.bx1 && mouseY >= t.by0 && mouseY <= t.by1) {
-                newHover = t.key
-                break
-            }
-        }
-        if (newHover !== hoverKey) {
-            hoverKey = newHover
-            area?.queue_draw()
-        }
-        return false
-    }
-
-    const handleClick = (self: any, event: Gdk.EventButton) => {
-        for (const t of clickTargets) {
-            if (mouseX >= t.bx0 && mouseX <= t.bx1 && mouseY >= t.by0 && mouseY <= t.by1) {
-                if (t.on) t.on()
-                break
-            }
-        }
-        return false
-    }
-
-    const handleKey = (self: any, event: Gdk.EventKey) => {
-        const k = event.keyval
-
-        if (k === Gdk.KEY_Escape) {
-            if (tab === "wall" && wallOpen) {
-                wallOpen = null
-                wallScroll = 0
-                area?.queue_draw()
-                return true
-            }
-            if (wmColorPick) {
-                closeWmPicker()
-                return true
-            }
-            if (kbCaptureKind || kbDeleteConfirm) {
-                if (kbDeleteConfirm) kbDeleteConfirm = null
-                else if (kbCaptureKind === "newuser" && (kbAddStep === "command" || kbAddStep === "app")) kbAddStep = "prompt"
-                else cancelCapture()
-                area?.queue_draw()
-                return true
-            }
-            visible.set(false)
-            releaseKeys()
-            return true
-        }
-
-        if (wmAppText !== "" || (tab === "wm" && wmAppEditing)) {
-            if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; area?.queue_draw() }
-            else if (k === Gdk.KEY_Return) { commitWmApps() }
-            else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); area?.queue_draw() }
-            else {
-                const u = Gdk.keyval_to_unicode(k)
-                if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); area?.queue_draw() }
-            }
-            return true
-        }
-
-        if (k === Gdk.KEY_Left) {
-            const idx = TABS.findIndex(t => t[1] === tab)
-            const next = idx <= 0 ? TABS.length - 1 : idx - 1
-            tab = TABS[next][1]
-            kbScroll = 0
-            cfgOpen = null
-            if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-            area?.queue_draw()
-            return true
-        }
-
-        if (k === Gdk.KEY_Right) {
-            const idx = TABS.findIndex(t => t[1] === tab)
-            const next = idx >= TABS.length - 1 ? 0 : idx + 1
-            tab = TABS[next][1]
-            kbScroll = 0
-            cfgOpen = null
-            if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-            area?.queue_draw()
-            return true
-        }
-
-        return false
-    }
-
-    const draw = (self: any, cr: any) => {
-        const w = SCREEN_WIDTH
-        const h = SCREEN_HEIGHT
-
-        clickTargets = []
-        const g = {
-            accent: USER.sysveil as any,
-            col: USER.sysveil as any,
-            push: pushHandler,
-            hoverKey,
-            X: 0,
-            Y: 0,
-            w,
-            h
-        }
-
-        cr.setSourceRGBA(0, 0, 0, 0.95)
-        cr.rectangle(0, 0, w, h)
-        cr.fill()
-
-        const tabBarH = 78
-        const contentY = tabBarH + 20
-        const contentH = h - contentY - 20
-
-        drawTabBar(cr, g, 40, 10, w - 80)
-
-        const x = 60
-        const cw = w - 120
-
-        if (tab === "colors") drawColors(cr, g, x, contentY, cw)
-        else if (tab === "keybinds") drawKeybinds(cr, g, x, contentY, cw)
-        else if (tab === "anim") drawConfig(cr, g, x, contentY, cw)
-        else if (tab === "wm") drawWm(cr, g, x, contentY, cw)
-        else if (tab === "wall" && !wallOpen) drawWallRing(cr, g, x, contentY, cw)
-        else drawWallBrowse(cr, g, x, contentY, cw)
-    }
-
-    area = DrawingArea({
-        widthRequest: SCREEN_WIDTH,
-        heightRequest: SCREEN_HEIGHT,
-        onDraw: draw
-    })
-
-    return Window({
-        name: "themesettings",
-        layer: Layer.OVERLAY,
-        anchor: Anchor.TOP | Anchor.BOTTOM | Anchor.LEFT | Anchor.RIGHT,
-        keymode: Keymode.ON_DEMAND,
-        visible: visible(),
-        setup: (self) => {
-            visible.subscribe(() => {
-                self.visible = visible.get()
-                if (visible.get()) {
-                    readTune()
-                    releaseKeys()
-                    tab = TABS[0][1]
-                    kbScroll = 0
-                    cfgOpen = null
-                    wallOpen = null
-                    wallScroll = 0
-                    area?.queue_draw()
-                }
-            })
-        },
-        onKeyPressEvent: handleKey,
-        child: EventBox({
-            onButtonPressEvent: handleClick,
-            onMotionNotifyEvent: handleMotion,
-            child: area
-        })
-    })
-}
-
-export const toggleThemeSettings = () => {
-    visible.set(!visible.get())
-}
-
 export const ThemesCtrl = () => {
-    return {
-        open: () => visible.set(true),
-        close: () => visible.set(false),
-        requestDraw: () => area?.queue_draw()
-    }
+    readTune()
+    ctrl = createModal({
+        name: "themesettings", tabTitle: "THEME", ss: 2, W: 560, H: 860, yaw: 15, pitch: 0, roll: 0,
+        anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
+        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; cfgOpen = null; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; kbScroll = 0; cfgOpen = null; ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; kbScroll = 0; cfgOpen = null; ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
+        onClose: () => {
+            closeWheel()
+            releaseKeys()
+            kbCaptureKind = null
+            kbCaptureCtx = {}
+            kbCaptureLabel = ""
+            kbHeld = { mods: [], modsMask: 0, key: null }
+            kbCaptured = null
+            kbListening = false
+            kbConflict = null
+            kbDeleteConfirm = null
+            kbScroll = 0
+            cfgOpen = null
+            cfgExpand = {}
+            wmOpen = null
+            wmExpand = {}
+            wmColorPick = null
+            wmAppText = ""
+        },
+        onKeyRaw: onKbKeyRaw,
+        onScroll: (d) => { cfgOpen = null; kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw() },
+        onKey: (k: number) => {
+            if (wmColorPick) {
+                if (k === Gdk.KEY_Escape) { closeWmPicker(); return true }
+                return true
+            }
+            if (wmAppText !== "" || (tab === "wm" && wmAppEditing)) {
+                if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; ctrl.requestDraw() }
+                else if (k === Gdk.KEY_Return) { commitWmApps() }
+                else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); ctrl.requestDraw() }
+                else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); ctrl.requestDraw() }
+                }
+                return true
+            }
+            if (kbCaptureKind === "newuser" && kbAddStep === "command" && k !== Gdk.KEY_Escape) {
+                if (k === Gdk.KEY_BackSpace) {
+                    kbCommandText = kbCommandText.slice(0, -1)
+                    ctrl.requestDraw()
+                    return
+                } else if (k === Gdk.KEY_Return) {
+                    kbCaptureKind = "newuser"
+                    kbCaptureCtx = { label: kbCommandText || "exec_cmd" }
+                    kbCaptureLabel = kbCommandText || "exec_cmd"
+                    kbAddStep = "capture"
+                    ctrl.requestDraw()
+                    return
+                } else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { kbCommandText += String.fromCharCode(u); ctrl.requestDraw() }
+                    return
+                }
+            }
+            if (k === Gdk.KEY_Escape && (kbCaptureKind || kbDeleteConfirm)) {
+                if (kbDeleteConfirm) {
+                    kbDeleteConfirm = null
+                } else if (kbCaptureKind === "newuser" && (kbAddStep === "command" || kbAddStep === "app")) {
+                    kbAddStep = "prompt"
+                } else {
+                    cancelCapture()
+                }
+                ctrl.requestDraw()
+                return
+            }
+            if (kbDeleteConfirm) {
+                const name = Gdk.keyval_name(k) || ""
+                if (name === "y" || name === "Y" || k === Gdk.KEY_Return) {
+                    const r = removeCustom(kbDeleteConfirm.raw_line)
+                    kbStatus = r.ok ? { ok: true, msg: `// DELETED ${kbDeleteConfirm.combo}` } : { ok: false, msg: "// DELETE FAILED" }
+                    kbDeleteConfirm = null
+                    ctrl.requestDraw()
+                    return
+                }
+                if (name === "n" || name === "N") {
+                    kbDeleteConfirm = null
+                    ctrl.requestDraw()
+                    return
+                }
+            }
+        },
+        draw: (ctx, g) => {
+            const panelX = g.X, panelW = g.w, panelY = g.Y, panelH = g.h
+            drawGlass(ctx, panelX, panelY, panelW, panelH, g.col)
+            txt(ctx, panelX + 16, panelY + 27, "THEME SETTINGS", TITLE, 14, g.accent, 0.98, 1, 0.45)
+            ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.32); ctx.setLineWidth(1)
+            ctx.newPath(); ctx.moveTo(panelX + 8, panelY + HEADER); ctx.lineTo(panelX + panelW - 8, panelY + HEADER); ctx.stroke()
+            const x = panelX + 18, w = panelW - 36
+            if (tab === "colors") drawColors(ctx, g, x, panelY + HEADER + 12, w)
+            else if (tab === "keybinds") drawKeybinds(ctx, g, x, panelY + HEADER + 12, w)
+            else if (tab === "anim") drawConfig(ctx, g, x, panelY + HEADER + 12, w)
+            else if (tab === "wm") drawWm(ctx, g, x, panelY + HEADER + 12, w)
+            else drawWip(ctx, g, x, panelY + HEADER + 12, w)
+        },
+    })
+    return ctrl
 }
-
-const oldCtrl = ThemesCtrl()
-ctrl = oldCtrl
-
-export const openThemeSettings = () => oldCtrl.open()
-export const closeThemeSettings = () => oldCtrl.close()
 
 type ColRow = [string, string, boolean]
 const SECTIONS: [string, ColRow[]][] = [
@@ -352,10 +190,6 @@ const SECTIONS: [string, ColRow[]][] = [
         ["netdown", "NET DOWNLOAD", false],
         ["netup", "NET UPLOAD", false],
     ]],
-    ["// MARKET", [
-        ["mktacc", "MARKET ACCENT", false],
-        ["mkthov", "MARKET HOVER", false],
-    ]],
     ["// POPUPS", [
         ["aurbg", "AUR FRAME BACKGROUND", true],
         ["aurfg", "AUR FRAME FOREGROUND", false],
@@ -381,18 +215,18 @@ const SECTIONS: [string, ColRow[]][] = [
     ]],
 ]
 
-const CROW_H = 32
-const CSEC_H = 40
+const CROW_H = 24
+const CSEC_H = 30
 
-export const drawColors = (ctx, g, x, y, w) => {
-    sectionHeader(ctx, g, x, y, "// PALETTE", w, 12)
-    const names = Object.keys(PALETTES), cols = 4, bw = (w - (cols - 1) * 8) / cols, bh = 32, top = y + 16
+const drawColors = (ctx, g, x, y, w) => {
+    sectionHeader(ctx, g, x, y, "// PALETTE", w)
+    const names = Object.keys(PALETTES), cols = 4, bw = (w - (cols - 1) * 8) / cols, bh = 24, top = y + 12
     names.forEach((name, i) => {
-        const bx = x + (i % cols) * (bw + 8), by = top + Math.floor(i / cols) * (bh + 8)
-        drawBtn(ctx, g.push, bx, by, bw, bh, name === "NETWATCH" ? "★" + name : name, () => applyColors(name), selPalette === name, selPalette === name ? (USER.cyan as any) : g.col, "", 13)
+        const bx = x + (i % cols) * (bw + 8), by = top + Math.floor(i / cols) * (bh + 6)
+        drawBtn(ctx, g.push, bx, by, bw, bh, name === "NETWATCH" ? "★" + name : name, () => applyColors(name), selPalette === name, g.col)
     })
-    const gridH = Math.ceil(names.length / cols) * (bh + 8)
-    const footY = g.Y + g.h - 48
+    const gridH = Math.ceil(names.length / cols) * (bh + 6)
+    const footY = g.Y + g.h - 34
     const visTop = top + gridH + 10
     const visBottom = footY - 10
     const visHeight = visBottom - visTop
@@ -419,7 +253,7 @@ export const drawColors = (ctx, g, x, y, w) => {
     for (const it of layout) {
         const ry = visTop + it.y - kbScroll
         if (it.kind === "sec") {
-            if (ry + CSEC_H >= visTop && ry <= visBottom) sectionHeader(ctx, g, x, ry + 10, it.label, w, 12)
+            if (ry + CSEC_H >= visTop && ry <= visBottom) sectionHeader(ctx, g, x, ry + 6, it.label, w)
             continue
         }
         if (ry + CROW_H < visTop || ry > visBottom) continue
@@ -436,7 +270,7 @@ export const drawColors = (ctx, g, x, y, w) => {
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
         ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
     }
-    drawBtn(ctx, g.push, x, footY, w, 38, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 13)
+    drawBtn(ctx, g.push, x, footY, w, 28, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44])
 }
 
 const noPush = (_r: any) => {}
@@ -444,15 +278,15 @@ const drawColorRow = (ctx, g, x, ry, w, key: string, label: string, alp: boolean
     const push = hit ? g.push : noPush
     const rgb = getUserColor(key)
     ctx.setSourceRGBA(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0.95)
-    ctx.rectangle(x, ry + 4, 19, 19); ctx.fill()
-    ctx.setSourceRGBA(1, 1, 1, 0.28); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, ry + 4.5, 18, 18); ctx.stroke()
-    txt(ctx, x + 28, ry + 21, label, TITLE, 12, g.accent, 0.9, 1)
-    txt(ctx, x + 250, ry + 21, rgbToHex(rgb), MONO, 10.5, g.col, 0.72)
-    drawStrip(ctx, push, "hue", key, x + 310, ry + 4, 130, 24)
-    drawStrip(ctx, push, "val", key, x + 450, ry + 4, 80, 24)
+    ctx.rectangle(x, ry + 3, 14, 14); ctx.fill()
+    ctx.setSourceRGBA(1, 1, 1, 0.28); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, ry + 3.5, 13, 13); ctx.stroke()
+    txt(ctx, x + 20, ry + 14, label, TITLE, 9, g.accent, 0.9, 1)
+    txt(ctx, x + 190, ry + 14, rgbToHex(rgb), MONO, 8, g.col, 0.72)
+    drawStrip(ctx, push, "hue", key, x + 236, ry + 2, 100, 16)
+    drawStrip(ctx, push, "val", key, x + 342, ry + 2, 62, 16)
     if (alp && hasAlpha(key)) {
-        drawStrip(ctx, push, "alp", key, x + 538, ry + 4, 64, 24)
-        txt(ctx, x + 612, ry + 21, getUserAlpha(key).toFixed(2), MONO, 10, g.col, 0.72)
+        drawStrip(ctx, push, "alp", key, x + 410, ry + 2, 52, 16)
+        txt(ctx, x + 466, ry + 14, getUserAlpha(key).toFixed(2), MONO, 7.5, g.col, 0.72)
     }
 }
 
@@ -545,11 +379,8 @@ let kbListening = false
 let kbConflict: { kind: "user" | "theme"; label: string; pending: { actionId?: string; combo: string; rawLine?: number; kind: CaptureKind; label?: string; comboName?: string; victimLine?: number | null } } | null = null
 let kbStatus: { ok: boolean; msg: string } | null = null
 let kbDeleteConfirm: { raw_line: number; combo: string; label: string } | null = null
-export let kbScroll = 0
-export let kbMaxScroll = 0
-
-export const setKbScroll = (v: number) => { kbScroll = v }
-export const setKbMaxScroll = (v: number) => { kbMaxScroll = v }
+let kbScroll = 0
+let kbMaxScroll = 0
 let kbAddStep: "prompt" | "command" | "app" | "capture" | null = null
 let wmOpen: string | null = null
 let wmExpand: Record<string, boolean> = {}
@@ -910,7 +741,7 @@ const drawChipRow = (ctx, g, x, y, w, row: RowEntry, keyPrefix: string) => {
         let cx = x + 76
         const parts = row.combo.split("+").map(s => s.trim()).filter(Boolean)
         for (let i = 0; i < parts.length; i++) {
-            const chipW = drawKeyCap(ctx, cx, y - CAP_H / 2, parts[i], CAP_H, { glow: true, fs: 13, col: USER.cyan as any })
+            const chipW = drawKeyCap(ctx, cx, y - CAP_H / 2, parts[i], CAP_H, { glow: true, fs: 13 })
             const chipKey = `${keyPrefix}:chip:${i}`
             g.push({
                 kind: "btn", hoverable: true, key: chipKey, bx0: cx, by0: y - CAP_H / 2, bx1: cx + chipW, by1: y + CAP_H / 2,
@@ -922,13 +753,13 @@ const drawChipRow = (ctx, g, x, y, w, row: RowEntry, keyPrefix: string) => {
     }
 
     const label = row.kind === "user-bind" ? row.label : row.kind === "user-add" ? row.label : row.action.label
-    const labelCol: any = deletePending ? [1, 0.4, 0.44] : (isRebound ? [1, 0.84, 0.12] : g.col)
+    const labelCol: any = deletePending ? [1, 0.4, 0.44] : (isRebound ? [1, 0.84, 0.12] : (isUser ? g.col : [0.78, 0.9, 1]))
     txt(ctx, x, y + 4, label, TITLE, 12.5, labelCol, 0.97, 1)
     const labelW = ctx.textExtents(label).width
 
     let cx = x + Math.min(w - 265, labelW + 28)
     const parts = row.combo.split("+").map(s => s.trim()).filter(Boolean)
-    const chipCol = isRebound ? [1, 0.84, 0.12] : (USER.cyan as any)
+    const chipCol = isRebound ? [1, 0.84, 0.12] : (isUser ? g.accent : [0.72, 0.88, 1])
     if (deletePending) {
         const red: any = [1, 0.4, 0.44]
         txt(ctx, cx, y + 3, "DELETE?", MONO, 9, red, 0.98, 1, 0)
@@ -945,7 +776,7 @@ const drawChipRow = (ctx, g, x, y, w, row: RowEntry, keyPrefix: string) => {
         return
     }
     for (let i = 0; i < parts.length; i++) {
-        const chipW = drawKeyCap(ctx, cx, y - CAP_H / 2, parts[i], CAP_H, { glow: isRebound, fs: 13, col: USER.cyan as any })
+        const chipW = drawKeyCap(ctx, cx, y - CAP_H / 2, parts[i], CAP_H, { glow: isRebound, fs: 13 })
         const chipKey = `${keyPrefix}:chip:${i}`
         g.push({
             kind: "btn", hoverable: true, key: chipKey, bx0: cx, by0: y - CAP_H / 2, bx1: cx + chipW, by1: y + CAP_H / 2,
@@ -1090,7 +921,7 @@ const drawCaptureForm = (ctx, g, x, y, w) => {
         let cx = bx0 + 14
         const cyChip = by0 + (boxH - CAP_H) / 2
         for (let i = 0; i < liveParts.length; i++) {
-            const cw = drawKeyCap(ctx, cx, cyChip, liveParts[i], CAP_H, { glow: isListening || !!kbCaptured, col: USER.cyan as any })
+            const cw = drawKeyCap(ctx, cx, cyChip, liveParts[i], CAP_H, { glow: isListening || !!kbCaptured })
             cx += cw + 8
         }
     } else {
@@ -1132,7 +963,7 @@ const drawCaptureForm = (ctx, g, x, y, w) => {
     drawBtn(ctx, g.push, x + bw + 6, cy, bw, 28, "CANCEL", () => { cancelCapture() }, false, g.col)
 }
 
-export const drawKeybinds = (ctx, g, x, y, w) => {
+const drawKeybinds = (ctx, g, x, y, w) => {
     const state = readUserLua()
     const themeMod = state.themeMod ?? themeModDefault()
     const userRebinds: Rebind[] = state.rebinds
@@ -1243,675 +1074,14 @@ export const drawKeybinds = (ctx, g, x, y, w) => {
     }
 }
 
-const WALL_THEMES: [string, string][] = [
-    ["NETWATCH", "netwatch"], ["SYNTHWAVE", "synthwave"], ["JOHNNY", "johnny"], ["KITTY", "kitty"],
-    ["BLADE", "blade_runner"], ["BLOODMOON", "bloodmoon"], ["GHOST", "ghost"], ["ARCTIC", "arctic"],
-    ["OTHERS", "others"],
-]
-
-const WALL_EXTS = ["mp4", "webm", "mkv", "mov", "png", "jpg", "jpeg", "webp", "gif"]
-const isVideoExt = (e: string) => ["mp4", "webm", "mkv", "mov"].includes(e)
-export let wallOpen: string | null = null
-let wallFiles: { name: string; path: string; ext: string }[] = []
-let wallFilesLoading = false
-export let wallScroll = 0
-let wallMaxScroll = 0
-let wallUploading = false
-
-export let wallPickerOpen = false
-let wallPickerDir = ""
-let wallPickerSel: { name: string; path: string; ext: string } | null = null
-let wallPickerEntries: { name: string; path: string; dir: boolean; ext: string }[] = []
-let wallPickerLoading = false
-export let wallPickerScroll = 0
-let wallPickerMaxScroll = 0
-export const setWallPickerScroll = (v: number) => { wallPickerScroll = v }
-let wallPathEditing = false
-let wallPathText = ""
-
-const THUMB_W = 160, THUMB_H = 90, THUMB_GAP = 10
-const thumbCache: Record<string, GdkPixbuf.Pixbuf | null> = {}
-
-const strHash = (s: string): string => {
-    let h = 5381
-    for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0
-    return h.toString(36)
-}
-
-const readCurrentWallpaper = (): string => {
-    try {
-        const [ok, bytes] = GLib.file_get_contents(WALLPAPER_LUA)
-        if (!ok) return ""
-        const m = String(new TextDecoder().decode(bytes)).match(/wallpaper\s*=\s*"([^"]*)"/)
-        return m ? m[1] : ""
-    } catch { return "" }
-}
-
-const loadWallFiles = (folder: string) => {
-    wallFiles = []
-    wallScroll = 0
-    wallFilesLoading = true
-    sh(`find "${WALLPAPERS_PATH}/${folder}" -maxdepth 1 -type f 2>/dev/null | sort`).then((o) => {
-        wallFilesLoading = false
-        const out = String(o || "").trim()
-        if (!out) { ctrl?.requestDraw(); return }
-        wallFiles = out.split("\n").map((p) => p.trim()).filter(Boolean).map((p) => {
-            const name = p.slice(p.lastIndexOf("/") + 1)
-            const ext = (name.slice(name.lastIndexOf(".") + 1) || "").toLowerCase()
-            return { name, path: p, ext }
-        }).filter((f) => WALL_EXTS.includes(f.ext))
-        ctrl?.requestDraw()
-    })
-}
-
-const openWallTheme = (folder: string) => {
-    wallOpen = folder
-    loadWallFiles(folder)
-    ctrl.requestDraw()
-}
-
-const getThumb = (path: string): GdkPixbuf.Pixbuf | null => {
-    if (path in thumbCache) return thumbCache[path]
-    thumbCache[path] = null
-    const cacheDir = `${GLib.get_user_cache_dir()}/cyberpunk/thumbs`
-    GLib.mkdir_with_parents(cacheDir, 0o755)
-    const key = `${strHash(path)}.png`
-    const cached = `${cacheDir}/${key}`
-    const deliver = (p: string) => {
-        try {
-            const pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(p, THUMB_W * 2, THUMB_H * 2, true)
-            thumbCache[path] = pb
-            ctrl?.requestDraw()
-        } catch { }
-    }
-    let have = false
-    try { have = GLib.file_test(cached, GLib.FileTest.EXISTS) } catch { }
-    if (have) { deliver(cached); return null }
-    if (isVideoExt(path.slice(path.lastIndexOf(".") + 1).toLowerCase())) {
-        sh(`mkdir -p "${cacheDir}" && ffmpeg -y -ss 1 -i "${path}" -vframes 1 -vf "scale=${THUMB_W * 2}:-2" "${cached}" 2>/dev/null`).then(() => deliver(cached))
-    } else {
-        try {
-            const pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, THUMB_W * 2, THUMB_H * 2, true)
-            pb.savev(cached, "png", [], [])
-            deliver(cached)
-        } catch { }
-    }
-    return null
-}
-
-const applyWallpaper = (f: { name: string; path: string; ext: string }) => {
-    execAsync(["bash", `${CYBER_DIR}/scripts/set-wallpaper`, f.path]).then((o) => {
-        const out = String(o || "").trim()
-        if (out) {
-            const line = out.split("\n").pop() || ""
-            wallStatusSet(false, `// ${line.replace(/\|::\|.*$/, "").slice(0, 60)}`)
-        } else {
-            GLib.file_set_contents(WALLPAPER_LUA, new TextEncoder().encode(`wallpaper = "${f.path}"\nreturn wallpaper\n`))
-            wallStatusSet(true, `// SET ${f.name.toUpperCase()}`)
-        }
-        ctrl.requestDraw()
-    }).catch((e) => {
-        wallStatusSet(false, `// SET FAILED: ${String(e).slice(0, 60)}`)
-        ctrl.requestDraw()
-    })
-}
-
-const wallStatusSet = (ok: boolean, msg: string) => { wallState.status = { ok, msg } }
-const wallState: { status: { ok: boolean; msg: string } | null } = { status: null }
-
-// reads whatever folder the picker is on, dirs first then the media, skips dotfiles and anything not in
-// WALL_EXTS so it dont list random files. the find is async so clicking into another folder fast means
-// the old one comes back late and overwrites it, thats why theres a wallPickerDir recheck before setting entries
-const loadPickerDir = (dir: string) => {
-    wallPickerDir = dir
-    wallPickerEntries = []
-    wallPickerScroll = 0
-    wallPickerLoading = true
-    const q = dir.replace(/'/g, `'\\''`)
-    sh(`find '${q}' -maxdepth 1 -mindepth 1 \\( -type d -o -type f \\) 2>/dev/null | sort`).then((o) => {
-        wallPickerLoading = false
-        if (wallPickerDir !== dir) { ctrl?.requestDraw(); return }
-        const out = String(o || "").trim()
-        const rows = out ? out.split("\n").map((p) => p.trim()).filter(Boolean) : []
-        const dirs: typeof wallPickerEntries = []
-        const files: typeof wallPickerEntries = []
-        for (const p of rows) {
-            const name = p.slice(p.lastIndexOf("/") + 1)
-            if (name.startsWith(".")) continue
-            const isDir = GLib.file_test(p, GLib.FileTest.IS_DIR)
-            if (isDir) { dirs.push({ name, path: p, dir: true, ext: "" }); continue }
-            const ext = (name.slice(name.lastIndexOf(".") + 1) || "").toLowerCase()
-            if (!WALL_EXTS.includes(ext)) continue
-            files.push({ name, path: p, dir: false, ext })
-        }
-        wallPickerEntries = [...dirs, ...files]
-        ctrl?.requestDraw()
-    })
-}
-
-const openPicker = (dir: string) => {
-    wallPickerSel = null
-    loadPickerDir(dir)
-    ctrl.requestDraw()
-}
-
-const pickWallpaper = () => {
-    if (wallUploading) return
-    wallPickerOpen = true
-    wallOpen = null
-    let start = `${GLib.get_home_dir()}/Pictures`
-    if (!GLib.file_test(start, GLib.FileTest.IS_DIR)) start = GLib.get_home_dir()
-    openPicker(start)
-}
-
-const closePicker = () => {
-    wallPickerOpen = false
-    wallPickerSel = null
-    wallPickerEntries = []
-    wallPathEditing = false
-    wallPathText = ""
-    ctrl.requestDraw()
-}
-
-const expandPath = (p: string): string => {
-    let s = p.trim()
-    if (!s) return GLib.get_home_dir()
-    if (s === "~") return GLib.get_home_dir()
-    if (s.startsWith("~/")) s = `${GLib.get_home_dir()}/${s.slice(2)}`
-    else if (!s.startsWith("/")) s = `${GLib.get_home_dir()}/${s}`
-    s = s.replace(/\/+$/, "")
-    return s || "/"
-}
-
-const commitWallPath = () => {
-    const target = expandPath(wallPathText)
-    wallPathEditing = false
-    if (GLib.file_test(target, GLib.FileTest.IS_DIR)) {
-        wallPathText = ""
-        openPicker(target)
-    } else {
-        wallStatusSet(false, "// NO SUCH FOLDER")
-        wallPathText = ""
-        ctrl.requestDraw()
-    }
-}
-
-// the tabs sit behind the picker and were grabbing keystrokes, so typing a folder path would flip tabs
-// instead of typing. while the path field is focused every key gets caught here and marked handled so
-// nothing leaks back to the tabs, when its not focused only escape matters and that closes the picker
-export const wallPickerKey = (k: number): boolean => {
-    if (!wallPickerOpen) return false
-    if (!wallPathEditing) {
-        if (k === Gdk.KEY_Escape) { closePicker(); return true }
-        return false
-    }
-    if (k === Gdk.KEY_Escape) { wallPathEditing = false; wallPathText = ""; ctrl.requestDraw(); return true }
-    if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { commitWallPath(); return true }
-    if (k === Gdk.KEY_BackSpace) { wallPathText = wallPathText.slice(0, -1); ctrl.requestDraw(); return true }
-    const u = Gdk.keyval_to_unicode(k)
-    if (u >= 32 && u < 0x10000) { wallPathText += String.fromCharCode(u); ctrl.requestDraw(); return true }
-    return true
-}
-
-const importWallpaper = (src: string) => {
-    const name = src.slice(src.lastIndexOf("/") + 1)
-    const ext = (name.slice(name.lastIndexOf(".") + 1) || "").toLowerCase()
-    if (!WALL_EXTS.includes(ext)) {
-        wallStatusSet(false, `// UNSUPPORTED TYPE: .${ext || "UNKNOWN"}`)
-        ctrl.requestDraw()
-        return
-    }
-    let size = 0
-    try { size = Gio.File.new_for_path(src).query_info("standard::size", 0, null).get_size() } catch {
-        wallStatusSet(false, "// FILE NOT READABLE")
-        ctrl.requestDraw()
-        return
-    }
-    if (size < 1024) {
-        wallStatusSet(false, "// FILE TOO SMALL / EMPTY")
-        ctrl.requestDraw()
-        return
-    }
-    const dst = `${WALLPAPERS_PATH}/others/${name}`
-    const applyFrom = (path: string, label: string) => {
-        wallStatusSet(true, `// SETTING ${name.toUpperCase()}…`)
-        ctrl.requestDraw()
-        execAsync(["bash", `${CYBER_DIR}/scripts/set-wallpaper`, path]).then((o) => {
-            const out = String(o || "").trim()
-            if (out && /\|::\||did not|not found|failed|died/i.test(out)) {
-                wallStatusSet(false, `// SET FAILED: ${out.split("\n").pop()?.replace(/\|::\|.*$/, "").slice(0, 50)}`)
-            } else {
-                wallStatusSet(true, `// ${label} ${name.toUpperCase()}`)
-            }
-            ctrl.requestDraw()
-        }).catch((e) => {
-            wallStatusSet(false, `// SET FAILED: ${String(e).slice(0, 50)}`)
-            ctrl.requestDraw()
-        })
-    }
-
-    if (src === dst) {
-        GLib.file_set_contents(WALLPAPER_LUA, new TextEncoder().encode(`wallpaper = "${dst}"\nreturn wallpaper\n`))
-        applyFrom(dst, "SET")
-        return
-    }
-
-    if (isVideoExt(ext)) {
-        sh(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${src}" 2>/dev/null`).then((dur) => {
-            if (!(parseFloat(String(dur || "").trim()) > 0)) {
-                wallStatusSet(false, "// NOT A VALID VIDEO FILE")
-                ctrl.requestDraw()
-                return
-            }
-            GLib.file_set_contents(WALLPAPER_LUA, new TextEncoder().encode(`wallpaper = "${src}"\nreturn wallpaper\n`))
-            applyFrom(src, "SET")
-            copyToOthers(src, dst)
-        })
-        return
-    }
-
-    GLib.file_set_contents(WALLPAPER_LUA, new TextEncoder().encode(`wallpaper = "${src}"\nreturn wallpaper\n`))
-    applyFrom(src, "SET")
-    copyToOthers(src, dst)
-}
-
-const copyToOthers = (src: string, dst: string) => {
-    wallUploading = true
-    sh(`mkdir -p "${WALLPAPERS_PATH}/others" && cp -f -- "${src}" "${dst}"`).then(() => {
-        wallUploading = false
-        if (wallOpen === "others") loadWallFiles("others")
-        ctrl.requestDraw()
-    })
-}
-
-const WALL_FRAME = (): [number, number, number] => USER.sysveil as any
-const WALL_TOKEN = (): [number, number, number] => USER.cyan as any
-
-// discarded the previous kiroshi wheel + modal style for settings, not only it was cpu consuming
-// but to make it more accurate to the game actual menu layout, with top middle tabs and the design
-// ui for buttons, fields etc etc. Created wallpaper selector inspired in the "Skill" sets. I tried
-// as fk to recreate that same PCB layout but i couldnt get it right no way, so i gave up and went to
-// photoshop. For wallpaper selector it loads a "wheel/menu.png" to render the radial menu, and the
-// buttons have their each png asset and their active state aswell, Upon changing theme/colors it just
-// applies the tint filter likewise other images 'round here.
-const WHEEL_SRC = 1024
-const wheelSurf = (): any => {
-    if ((wheelSurf as any)._s === undefined) {
-        try { (wheelSurf as any)._s = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/wheel/menu.png`) }
-        catch { (wheelSurf as any)._s = null }
-    }
-    return (wheelSurf as any)._s
-}
-
-const wheelPad = (asset: string, hover: boolean): any => {
-    const key = hover ? `${asset}_hover` : asset
-    const cache = ((wheelPad as any)._c ||= {})
-    if (cache[key] === undefined) {
-        try { cache[key] = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/wheel/pads/${key}.png`) }
-        catch { cache[key] = null }
-    }
-    return cache[key]
-}
-
-const WALL_GLITCH_MS = 167
-const wallHoverAt: Record<string, number> = {}
-let wallLastHot: string | null = null
-
-const WALL_PADS: { folder: string; asset: string; box: [number, number, number, number] }[] = [
-    { folder: "netwatch", asset: "netwatch", box: [355, 60, 667, 260] },
-    { folder: "synthwave", asset: "synth", box: [610, 186, 915, 364] },
-    { folder: "johnny", asset: "johnny", box: [686, 400, 977, 576] },
-    { folder: "kitty", asset: "kitty", box: [611, 624, 909, 799] },
-    { folder: "blade_runner", asset: "blade", box: [356, 727, 663, 903] },
-    { folder: "bloodmoon", asset: "bloodmoon", box: [96, 616, 400, 783] },
-    { folder: "ghost", asset: "ghost", box: [47, 400, 338, 576] },
-    { folder: "arctic", asset: "arctic", box: [107, 185, 413, 364] },
-    { folder: "others", asset: "other", box: [97, 792, 389, 958] },
-]
-const WALL_HUB = { asset: "add_wallpaper", box: [368, 387, 652, 602] as [number, number, number, number] }
-
-const wheelTintCache: Record<string, any> = {}
-// changing the accent color just re-tints every pad live instead of keeping a separate image set per
-// theme. the tint keeps the original shading so lighter themes like arctic come out white instead of
-// reddish, and the result is cached per color since re-tinting every frame killed the framerate
-const tintedWheel = (surf: any, name: string, col: [number, number, number] | null): any => {
-    if (!surf) return null
-    if (!col) return surf
-    const ck = `${name}|${Math.round(col[0] * 255)},${Math.round(col[1] * 255)},${Math.round(col[2] * 255)}`
-    if (wheelTintCache[ck]) return wheelTintCache[ck]
-    try {
-        const s = new Cairo.ImageSurface(Cairo.Format.ARGB32, WHEEL_SRC, WHEEL_SRC)
-        const c = new Cairo.Context(s)
-        c.setSourceSurface(surf, 0, 0); c.paint()
-        c.setOperator(26); c.setSourceRGBA(0.5, 0.5, 0.5, 1); c.maskSurface(surf, 0, 0)
-        c.setOperator(27); c.setSourceRGBA(col[0], col[1], col[2], 1); c.maskSurface(surf, 0, 0)
-        c.setOperator(2)
-        s.flush()
-        wheelTintCache[ck] = s
-        return s
-    } catch { return surf }
-}
-onColorChange(() => { for (const k of Object.keys(wheelTintCache)) delete wheelTintCache[k] })
-
-export const drawWallRing = (ctx, g, x, y, w) => {
-    const surf = wheelSurf()
-    const topY = y + 4
-    const botLimit = Math.min(y + g.h - 12, SCREEN_HEIGHT - 20) - 26
-    const side = Math.max(120, Math.min(w, botLimit - topY))
-    const ox = x + (w - side) / 2
-    const oy = topY + (botLimit - topY - side) / 2
-    const scale = side / WHEEL_SRC
-    const S = (v: number) => v * scale
-    const toScr = (bx: [number, number, number, number]): [number, number, number, number] =>
-        [ox + S(bx[0]), oy + S(bx[1]), ox + S(bx[2]), oy + S(bx[3])]
-
-    const frame = WALL_FRAME()
-    const tok = WALL_TOKEN()
-    const natural = getPaletteName() === "NETWATCH"
-    const HOVER_A = 0.5
-
-    if (surf) {
-        const menuS = tintedWheel(surf, "menu", natural ? null : frame)
-        ctx.save()
-        ctx.translate(ox, oy)
-        ctx.scale(scale, scale)
-        ctx.setSourceSurface(menuS, 0, 0)
-        ctx.paintWithAlpha(1)
-        ctx.restore()
-
-        const now = Date.now()
-        const hoverKey = g.push.hoverKey
-        const curHot = hoverKey === "wupload" ? "hub"
-            : (typeof hoverKey === "string" && hoverKey.startsWith("wtile|"))
-                ? (WALL_PADS.find((p) => `wtile|${p.folder}` === hoverKey)?.folder ?? null)
-                : null
-        if (curHot && curHot !== wallLastHot) wallHoverAt[curHot] = now
-        wallLastHot = curHot
-
-        const rnd = (a: number) => {
-            const s = Math.sin(a * 91.37) * 43758.5453
-            return (s - Math.floor(s)) * 2 - 1
-        }
-        // hover pulls the pads _hover.png cause i was crashing out trying to apply a hover effect right on the
-        // shape, so the menu options and their hover states are all just images being switched. theres a short
-        // glitch on the way in, the image is sliced into bands that slide sideways and settle over WALL_GLITCH_MS,
-        // one shot on enter, ends at 50% opacity
-        const hot = (id: string, asset: string) => {
-            const hov = wheelPad(asset, true)
-            if (!hov) return
-            const hovS = tintedWheel(hov, `${asset}_h`, natural ? null : tok)
-            const started = wallHoverAt[id] ?? now
-            const prog = Math.min(1, (now - started) / WALL_GLITCH_MS)
-            const ease = prog * prog * (3 - 2 * prog)
-            const glitch = 1 - ease
-
-            ctx.save()
-            ctx.translate(ox, oy)
-            ctx.scale(scale, scale)
-
-            if (glitch <= 0.01) {
-                ctx.setSourceSurface(hovS, 0, 0); ctx.paintWithAlpha(HOVER_A)
-            } else {
-                const bands = 11
-                const bh = WHEEL_SRC / bands
-                for (let b = 0; b < bands; b++) {
-                    const dx = rnd(b + 1) * 34 * glitch
-                    ctx.save()
-                    ctx.rectangle(0, b * bh, WHEEL_SRC, bh)
-                    ctx.clip()
-                    ctx.setSourceSurface(hovS, dx, 0)
-                    ctx.paintWithAlpha(HOVER_A * (0.4 + 0.6 * ease))
-                    ctx.restore()
-                }
-                g.refresh?.()
-            }
-            ctx.restore()
-        }
-
-        for (const p of WALL_PADS) {
-            if (wallOpen === p.folder || hoverKey === `wtile|${p.folder}`) hot(p.folder, p.asset)
-        }
-        if (hoverKey === "wupload") hot("hub", WALL_HUB.asset)
-    } else {
-        txt(ctx, x + 10, y + 30, "// wheel/menu.png missing", MONO, 11, frame, 0.8)
-    }
-
-    for (const p of WALL_PADS) {
-        const [bx0, by0, bx1, by1] = toScr(p.box)
-        g.push({ kind: "btn", hoverable: true, key: `wtile|${p.folder}`, bx0, by0, bx1, by1, on: () => openWallTheme(p.folder) })
-    }
-    const [hx0, hy0, hx1, hy1] = toScr(WALL_HUB.box)
-    g.push({ kind: "btn", hoverable: true, key: "wupload", bx0: hx0, by0: hy0, bx1: hx1, by1: hy1, on: () => pickWallpaper() })
-
-    const cx = ox + side / 2
-    const st = (wallState as any).status
-    if (st) {
-        const col = st.ok ? [0.42, 1, 0.6] : [1, 0.4, 0.44]
-        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
-        const tw = ctx.textExtents(st.msg).width
-        txt(ctx, cx - tw / 2, oy + side + 14, st.msg, MONO, 9, col, 0.95, 1)
-    }
-    const cur = readCurrentWallpaper()
-    if (cur) {
-        const bn = cur.slice(cur.lastIndexOf("/") + 1)
-        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8)
-        const s = `CURRENT: ${fitTxt(ctx, bn, MONO, 8, w - 40)}`
-        const tw = ctx.textExtents(s).width
-        txt(ctx, cx - tw / 2, oy + side + 26, s, MONO, 8, g.col, 0.5)
-    }
-}
-
-export const drawWallBrowse = (ctx, g, x, y, w) => {
-    drawBtn(ctx, g.push, x, y, 90, 26, "◂ BACK", () => {
-        wallOpen = null
-        wallScroll = 0
-        ctrl.requestDraw()
-    }, false, g.col, "", 10)
-
-    const folderLabel = (WALL_THEMES.find(([, f]) => f === wallOpen) || ["OTHERS", ""])[0]
-    txt(ctx, x + 104, y + 17, `// ${folderLabel}`, MONO, 10, g.accent, 0.9, 1)
-
-    const st = (wallState as any).status
-    if (st) {
-        const col = st.ok ? [0.42, 1, 0.6] : [1, 0.4, 0.44]
-        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
-        txt(ctx, x + w - ctx.textExtents(st.msg).width - 4, y + 17, st.msg, MONO, 8.5, col, 0.95, 1)
-    }
-
-    const visTop = y + 36, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
-    if (wallFilesLoading) {
-        txt(ctx, x + 10, visTop + 24, "// SCANNING…", MONO, 10, g.col, 0.7)
-        return
-    }
-    if (wallFiles.length === 0) {
-        txt(ctx, x + 10, visTop + 24, "// NO WALLPAPERS IN THIS FOLDER", MONO, 10, g.col, 0.7)
-        return
-    }
-
-    const cols = Math.max(1, Math.floor((w - 8) / (THUMB_W + THUMB_GAP)))
-    const rowH = THUMB_H + 34
-    const cur = readCurrentWallpaper()
-    const totalRows = Math.ceil(wallFiles.length / cols)
-    const contentH = totalRows * rowH
-    wallMaxScroll = Math.max(0, contentH - visHeight)
-    if (wallScroll > wallMaxScroll) wallScroll = wallMaxScroll
-    if (wallScroll < 0) wallScroll = 0
-
-    ctx.save()
-    ctx.rectangle(x - 4, visTop, w + 8, visHeight)
-    ctx.clip()
-    wallFiles.forEach((f, i) => {
-        const col = i % cols, row = Math.floor(i / cols)
-        const tx = x + col * (THUMB_W + THUMB_GAP)
-        const ty = visTop + row * rowH - wallScroll
-        if (ty + rowH < visTop || ty > visBottom) return
-        const active = cur === f.path
-        const key = `wthumb|${i}`
-        const hovered = g.push.hoverKey === key
-        const bc = active ? WALL_TOKEN() : hovered ? WALL_FRAME() : g.col
-        ctx.save()
-        if (hovered || active) {
-            ctx.setOperator(12)
-            ctx.rectangle(tx - 3, ty - 3, THUMB_W + 6, THUMB_H + 6); ctx.setSourceRGBA(bc[0], bc[1], bc[2], 0.25); ctx.setLineWidth(4); ctx.stroke()
-            ctx.setOperator(2)
-        }
-        ctx.rectangle(tx, ty, THUMB_W, THUMB_H)
-        ctx.setSourceRGBA(bc[0] * 0.12, bc[1] * 0.12, bc[2] * 0.16, 0.5); ctx.fill()
-        const pb = getThumb(f.path)
-        if (pb) {
-            const iw = pb.get_width(), ih = pb.get_height()
-            const s = Math.min(THUMB_W / iw, THUMB_H / ih)
-            const dw = iw * s, dh = ih * s
-            ctx.save()
-            ctx.rectangle(tx, ty, THUMB_W, THUMB_H); ctx.clip()
-            Gdk.cairo_set_source_pixbuf(ctx, pb, tx + (THUMB_W - dw) / 2, ty + (THUMB_H - dh) / 2)
-            ctx.paintWithAlpha(1)
-            ctx.restore()
-        }
-        ctx.setSourceRGBA(bc[0], bc[1], bc[2], active ? 1 : 0.8); ctx.setLineWidth(hovered ? 1.3 : 0.9)
-        ctx.rectangle(tx + 0.5, ty + 0.5, THUMB_W - 1, THUMB_H - 1); ctx.stroke()
-        ctx.restore()
-        const badge = isVideoExt(f.ext) ? "▶" : "▣"
-        txt(ctx, tx + 2, ty + THUMB_H + 14, `${badge} ${fitTxt(ctx, f.name, MONO, 8, THUMB_W - 4)}`, MONO, 8, active ? g.accent : g.col, active ? 1 : 0.72)
-        g.push({ kind: "btn", hoverable: true, key, bx0: tx, by0: ty, bx1: tx + THUMB_W, by1: ty + THUMB_H, on: () => applyWallpaper(f) })
-    })
-    ctx.restore()
-
-    if (wallMaxScroll > 0) {
-        const fillH = visHeight * (wallScroll / wallMaxScroll)
-        const barH = Math.max(20, visHeight - fillH)
-        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.setLineWidth(2)
-        ctx.newPath(); ctx.moveTo(x + w + 4, visTop); ctx.lineTo(x + w + 4, visBottom); ctx.stroke()
-        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
-        ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
-    }
-}
-
-export const drawWallPicker = (ctx, g, x, y, w) => {
-    drawBtn(ctx, g.push, x, y, 90, 26, "◂ BACK", () => {
-        closePicker()
-    }, false, g.col, "", 10)
-
-    const home = GLib.get_home_dir()
-    const parent = wallPickerDir.slice(0, wallPickerDir.lastIndexOf("/")) || "/"
-    const canUp = wallPickerDir !== "/" && wallPickerDir.length > 1
-    drawBtn(ctx, g.push, x + 96, y, 44, 26, "", () => {
-        if (canUp) { wallPathEditing = false; wallPathText = ""; openPicker(parent) }
-    }, false, g.accent, ch(0xf062), 12)
-
-    const fieldX = x + 148, fieldW = w - 148 - 108, fieldH = 26
-    const shownDir = wallPickerDir.startsWith(home) ? "~" + wallPickerDir.slice(home.length) : wallPickerDir
-    const fieldHover = g.push.hoverKey === "wpath"
-    const fc = wallPathEditing ? g.accent : fieldHover ? WALL_FRAME() : g.col
-    ctx.rectangle(fieldX, y, fieldW, fieldH)
-    ctx.setSourceRGBA(fc[0] * 0.12, fc[1] * 0.12, fc[2] * 0.16, wallPathEditing ? 0.6 : 0.4); ctx.fill()
-    ctx.setSourceRGBA(fc[0], fc[1], fc[2], wallPathEditing ? 1 : fieldHover ? 0.9 : 0.65); ctx.setLineWidth(wallPathEditing ? 1.3 : 0.9)
-    ctx.rectangle(fieldX + 0.5, y + 0.5, fieldW - 1, fieldH - 1); ctx.stroke()
-    const fieldStr = wallPathEditing ? `${wallPathText}_` : shownDir
-    txt(ctx, fieldX + 8, y + 17, fitTxt(ctx, fieldStr, MONO, 10, fieldW - 16), MONO, 10, wallPathEditing ? g.accent : g.col, wallPathEditing ? 1 : 0.85)
-    g.push({
-        kind: "btn", hoverable: true, key: "wpath",
-        bx0: fieldX, by0: y, bx1: fieldX + fieldW, by1: y + fieldH,
-        on: () => {
-            wallPathEditing = true
-            wallPathText = shownDir
-            ctrl.requestDraw()
-        }
-    })
-
-    const applyOk = !!wallPickerSel && !wallUploading
-    drawBtn(ctx, g.push, x + w - 100, y, 100, 26, "APPLY", () => {
-        if (applyOk && wallPickerSel) { const p = wallPickerSel.path; closePicker(); importWallpaper(p) }
-    }, applyOk, applyOk ? g.accent : g.col, "", 10)
-
-    const st = (wallState as any).status
-    if (st) {
-        const col = st.ok ? [0.42, 1, 0.6] : [1, 0.4, 0.44]
-        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
-        txt(ctx, x + w - ctx.textExtents(st.msg).width - 4, y + 40, st.msg, MONO, 8.5, col, 0.95, 1)
-    }
-
-    const visTop = y + 48, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
-    if (wallPickerLoading) {
-        txt(ctx, x + 10, visTop + 24, "// SCANNING…", MONO, 10, g.col, 0.7)
-        return
-    }
-    if (wallPickerEntries.length === 0) {
-        txt(ctx, x + 10, visTop + 24, "// EMPTY / NO MEDIA HERE", MONO, 10, g.col, 0.7)
-        return
-    }
-
-    const cols = Math.max(1, Math.floor((w - 8) / (THUMB_W + THUMB_GAP)))
-    const rowH = THUMB_H + 34
-    const totalRows = Math.ceil(wallPickerEntries.length / cols)
-    const contentH = totalRows * rowH
-    wallPickerMaxScroll = Math.max(0, contentH - visHeight)
-    if (wallPickerScroll > wallPickerMaxScroll) wallPickerScroll = wallPickerMaxScroll
-    if (wallPickerScroll < 0) wallPickerScroll = 0
-
-    ctx.save()
-    ctx.rectangle(x - 4, visTop, w + 8, visHeight)
-    ctx.clip()
-    wallPickerEntries.forEach((e, i) => {
-        const col = i % cols, row = Math.floor(i / cols)
-        const tx = x + col * (THUMB_W + THUMB_GAP)
-        const ty = visTop + row * rowH - wallPickerScroll
-        if (ty + rowH < visTop || ty > visBottom) return
-        const key = `wpick|${i}`
-        const hovered = g.push.hoverKey === key
-        const selected = !e.dir && wallPickerSel?.path === e.path
-        const bc = selected ? WALL_TOKEN() : hovered ? WALL_FRAME() : g.col
-        ctx.save()
-        if (hovered || selected) {
-            ctx.setOperator(12)
-            ctx.rectangle(tx - 3, ty - 3, THUMB_W + 6, THUMB_H + 6); ctx.setSourceRGBA(bc[0], bc[1], bc[2], 0.25); ctx.setLineWidth(4); ctx.stroke()
-            ctx.setOperator(2)
-        }
-        ctx.rectangle(tx, ty, THUMB_W, THUMB_H)
-        ctx.setSourceRGBA(bc[0] * 0.12, bc[1] * 0.12, bc[2] * 0.16, 0.5); ctx.fill()
-        if (e.dir) {
-            ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(38)
-            ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.92)
-            const gl = ch(0xf07b)
-            const ge = ctx.textExtents(gl)
-            ctx.moveTo(tx + THUMB_W / 2 - ge.width / 2, ty + THUMB_H / 2 + 14); ctx.showText(gl)
-        } else {
-            const pb = getThumb(e.path)
-            if (pb) {
-                const iw = pb.get_width(), ih = pb.get_height()
-                const s = Math.min(THUMB_W / iw, THUMB_H / ih)
-                const dw = iw * s, dh = ih * s
-                ctx.save()
-                ctx.rectangle(tx, ty, THUMB_W, THUMB_H); ctx.clip()
-                Gdk.cairo_set_source_pixbuf(ctx, pb, tx + (THUMB_W - dw) / 2, ty + (THUMB_H - dh) / 2)
-                ctx.paintWithAlpha(1)
-                ctx.restore()
-            }
-        }
-        ctx.setSourceRGBA(bc[0], bc[1], bc[2], selected ? 1 : 0.8); ctx.setLineWidth(hovered ? 1.3 : 0.9)
-        ctx.rectangle(tx + 0.5, ty + 0.5, THUMB_W - 1, THUMB_H - 1); ctx.stroke()
-        ctx.restore()
-        const badge = e.dir ? "▸" : isVideoExt(e.ext) ? "▶" : "▣"
-        txt(ctx, tx + 2, ty + THUMB_H + 14, `${badge} ${fitTxt(ctx, e.name, MONO, 8, THUMB_W - 4)}`, MONO, 8, e.dir ? g.accent : selected ? g.accent : g.col, e.dir || selected ? 1 : 0.72)
-        g.push({
-            kind: "btn", hoverable: true, key,
-            bx0: tx, by0: ty, bx1: tx + THUMB_W, by1: ty + THUMB_H,
-            on: () => {
-                if (e.dir) { openPicker(e.path) }
-                else { wallPickerSel = { name: e.name, path: e.path, ext: e.ext }; ctrl.requestDraw() }
-            }
-        })
-    })
-    ctx.restore()
-
-    if (wallPickerMaxScroll > 0) {
-        const fillH = visHeight * (wallPickerScroll / wallPickerMaxScroll)
-        const barH = Math.max(20, visHeight - fillH)
-        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.setLineWidth(2)
-        ctx.newPath(); ctx.moveTo(x + w + 4, visTop); ctx.lineTo(x + w + 4, visBottom); ctx.stroke()
-        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
-        ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
-    }
+const drawWip = (ctx, g, x, y, w) => {
+    const cx = x + w / 2
+    const t1 = "WORK IN PROGRESS."
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(16)
+    txt(ctx, cx - ctx.textExtents(t1).width / 2, y + 72, t1, TITLE, 16, g.accent, 0.95, 1, 0.3)
+    const t2 = "COMING SOON :)"
+    ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(11)
+    txt(ctx, cx - ctx.textExtents(t2).width / 2, y + 98, t2, MONO, 11, g.col, 0.6)
 }
 
 const commitWmApps = () => {
@@ -1941,6 +1111,8 @@ const hsvToRgb = (h: number, s: number, v: number): [number, number, number] => 
     const m = v - c
     return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)]
 }
+const rgbToHex = (r: number, g: number, b: number): string =>
+    [r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, "0")).join("")
 
 const openWmPicker = (key: string) => {
     const cur = hexToRgb(wmStr(key))
@@ -1952,7 +1124,7 @@ const openWmPicker = (key: string) => {
 const liveWmPick = () => {
     if (!wmColorPick) return
     const [r, gg, b] = hsvToRgb(wmColorPick.h, wmColorPick.s, wmColorPick.v)
-    setWm(wmColorPick.key, rgbToHex([r, gg, b]).replace(/^#/, ""))
+    setWm(wmColorPick.key, rgbToHex(r, gg, b))
     ctrl.requestDraw()
 }
 const closeWmPicker = () => { wmColorPick = null; ctrl.requestDraw() }
@@ -1971,13 +1143,13 @@ const hexToRgb = (h: string): [number, number, number] | null => {
 }
 
 const drawWmSlider = (ctx, g, x, ry, w, key, min, max, fmt) => {
-    const trackX = x + w - 250, trackW = 200
+    const trackX = x + w - 190, trackW = 150
     const v = wmNum(key)
     const norm = Math.max(0, Math.min(1, (v - min) / (max - min)))
-    drawSlider(ctx, g.push, trackX, ry + 14, trackW, norm, (nv) => {
+    drawSlider(ctx, g.push, trackX, ry + 11, trackW, norm, (nv) => {
         setWm(key, Math.round((min + nv * (max - min)) * 100) / 100)
     })
-    txt(ctx, trackX - 52, ry + 19, fmt(v), MONO, 11, g.accent, 0.9, 0, 0)
+    txt(ctx, trackX - 40, ry + 15, fmt(v), MONO, 8.5, g.accent, 0.9, 0, 0)
 }
 
 const WM_SECTIONS: { title: string; keys: string[]; rows: { t: "tog" | "sld" | "sel" | "col" | "car" | "apps" | "corner"; k: string; label: string; grp?: string }[] }[] = [
@@ -2032,18 +1204,18 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
 
     if (r.t === "car") {
         const open = wmExpand[r.k] === true
-        drawBtn(ctx, push, x + 16, ry + 4, 300, 24, `${open ? "▾" : "▸"}  ${r.label}`, () => { wmExpand[r.k] = !open; wmOpen = null; ctrl.requestDraw() }, open, open ? (USER.cyan as any) : g.col, "", 12)
+        drawBtn(ctx, push, x + 16, ry + 4, 230, 18, `${open ? "▾" : "▸"}  ${r.label}`, () => { wmExpand[r.k] = !open; wmOpen = null; ctrl.requestDraw() }, open, g.col, "", 9)
         return
     }
 
     if (r.t === "tog") {
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, g.col, 0.9)
-        drawToggle(ctx, push, x + w - 58, ry + 4, wmBool(r.k), () => { toggleWm(r.k) }, false, g.col, 1.35, USER.cyan as any)
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, g.col, 0.9)
+        drawToggle(ctx, push, x + w - 44, ry + 4, wmBool(r.k), () => { toggleWm(r.k) }, false, g.col)
         return
     }
 
     if (r.t === "sld") {
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, dis ? [0.5, 0.54, 0.58] : g.col, dis ? 0.38 : 0.9)
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, dis ? [0.5, 0.54, 0.58] : g.col, dis ? 0.38 : 0.9)
         if (dis) return
         const fmts: Record<string, (v: number) => string> = {
             wmOpacityVal: (v) => `${Math.round(v * 100)}%`,
@@ -2055,7 +1227,7 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
             wmRounding: (v) => `${Math.round(v)}px`,
         }
         const ranges: Record<string, [number, number]> = {
-            wmOpacityVal: [0.4, 1], wmBorderSize: [0, 20], wmGlowRange: [0, 30], wmGlowRp: [1, 5],
+            wmOpacityVal: [0.4, 1], wmBorderSize: [0, 5], wmGlowRange: [0, 30], wmGlowRp: [1, 5],
             wmShadowRange: [0, 40], wmShadowAlpha: [10, 100], wmRounding: [0, 40],
         }
         drawWmSlider(ctx, g, x, ry, w, r.k, ranges[r.k]?.[0] ?? 0, ranges[r.k]?.[1] ?? 1, fmts[r.k] ?? ((v) => `${v}`))
@@ -2063,17 +1235,17 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     }
 
     if (r.t === "col") {
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, g.col, 0.9)
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, g.col, 0.9)
         const cur = wmStr(r.k)
         const rgb = hexToRgb(cur)
         const picking = wmColorPick?.key === r.k
         const label = cur ? `#${cur}` : "THEME"
-        drawColorCell(ctx, g, x + w - 140, ry + 4, 24, rgb)
-        push({ kind: "btn", bx0: x + w - 144, by0: ry + 2, bx1: x + w - 56, by1: ry + 30, on: () => { if (!picking) openWmPicker(r.k) } })
-        txt(ctx, x + w - 110, ry + 21, label, MONO, 11, rgb ? g.accent : g.col, 0.9)
-        drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, picking ? "OPEN" : "PICK", () => {
+        drawColorCell(ctx, g, x + w - 120, ry + 3, 18, rgb)
+        push({ kind: "btn", bx0: x + w - 124, by0: ry + 1, bx1: x + w - 50, by1: ry + 22, on: () => { if (!picking) openWmPicker(r.k) } })
+        txt(ctx, x + w - 96, ry + 16, label, MONO, 8.5, rgb ? g.accent : g.col, 0.9)
+        drawBtn(ctx, push, x + w - 44, ry + 3, 40, 18, picking ? "OPEN" : "PICK", () => {
             if (!picking) openWmPicker(r.k)
-        }, picking, g.col, "", 11)
+        }, picking, g.col, "", 8)
         return
     }
 
@@ -2083,13 +1255,13 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
         const editing = wmAppEditing && wmAppText !== ""
         const shown = editing ? `${wmAppText}_` : apps.length ? apps.join(", ") : "NONE"
         const editable = mode !== "off"
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, editable ? g.col : [0.5, 0.54, 0.58], editable ? 0.9 : 0.38)
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, editable ? g.col : [0.5, 0.54, 0.58], editable ? 0.9 : 0.38)
         if (!editable) return
-        txt(ctx, lx + 250, ry + 21, fitTxt(ctx, shown, MONO, 10.5, w - 420), MONO, 10.5, editing ? g.accent : g.col, editing ? 1 : 0.7)
-        drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, editing ? "OK" : "EDIT", () => {
+        txt(ctx, lx + 190, ry + 16, fitTxt(ctx, shown, MONO, 8, w - 320), MONO, 8, editing ? g.accent : g.col, editing ? 1 : 0.7)
+        drawBtn(ctx, push, x + w - 44, ry + 3, 40, 18, editing ? "OK" : "EDIT", () => {
             if (editing) commitWmApps()
             else { wmAppEditing = true; wmAppText = ""; ctrl.requestDraw() }
-        }, editing, g.col, "", 11)
+        }, editing, g.col, "", 8)
         return
     }
 
@@ -2098,11 +1270,11 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     const opts = isCorner ? CORNER_OPTS : isMode ? OPACITY_MODES : []
     const labels = isCorner ? CORNER_LABEL : isMode ? OPACITY_MODE_LABEL : {}
     const cur = wmStr(r.k), open = wmOpen === r.k
-    txt(ctx, lx, ry + 21, r.label, TITLE, 12, g.col, 0.9)
-    drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${labels[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { wmOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
+    txt(ctx, lx, ry + 16, r.label, TITLE, 9, g.col, 0.9)
+    drawBtn(ctx, push, x + w - 266, ry + 3, 264, 20, `${labels[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { wmOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 9.5)
 }
 
-export const drawWm = (ctx, g, x, y, w) => {
+const drawWm = (ctx, g, x, y, w) => {
     const visTop = y + 16, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
 
     const layout: { y: number; kind: "sec" | "row"; title: string; sec?: { title: string; keys: string[]; rows: any[] }; row?: any }[] = []
@@ -2132,15 +1304,15 @@ export const drawWm = (ctx, g, x, y, w) => {
         const ry = visTop + it.y - kbScroll
         if (it.kind === "sec") {
             if (ry + GSEC_H < visTop || ry > visBottom) continue
-            sectionHeader(ctx, g, x, ry + 16, it.sec!.title, w - 92, 12)
-            const shown = ry >= visTop - 1 && ry + 24 <= visBottom + 1
-            drawBtn(ctx, (shown && !wmColorPick && !wmOpen) ? g.push : noPush, x + w - 88, ry + 1, 88, 22, "DEFAULTS", () => { resetWm(it.sec!.keys); wmOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 11)
+            sectionHeader(ctx, g, x, ry + 12, it.sec!.title, w - 66)
+            const shown = ry >= visTop - 1 && ry + 18 <= visBottom + 1
+            drawBtn(ctx, (shown && !wmColorPick && !wmOpen) ? g.push : noPush, x + w - 62, ry + 1, 62, 16, "DEFAULTS", () => { resetWm(it.sec!.keys); wmOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 8)
             continue
         }
         if (ry + GROW_H < visTop || ry > visBottom) continue
         const hit = ry >= visTop - 1 && ry + GROW_H <= visBottom + 1
         const r = it.row!
-        if (r.t === "sel" && wmOpen === r.k) pop = { key: r.k, bx: x + w - 302, by: ry + 29, bw: 300 }
+        if (r.t === "sel" && wmOpen === r.k) pop = { key: r.k, bx: x + w - 266, by: ry + 23, bw: 264 }
         if (r.t === "col" && wmColorPick?.key === r.k) colAnchor = ry
         drawWmRow(ctx, g, x, ry, w, r, hit && !wmOpen && !wmColorPick)
     }
@@ -2159,27 +1331,27 @@ export const drawWm = (ctx, g, x, y, w) => {
         const isCorner = pop.key === "wmCorners"
         const opts = isCorner ? CORNER_OPTS : OPACITY_MODES
         const labels = isCorner ? CORNER_LABEL : OPACITY_MODE_LABEL
-        const ih = 27, listH = opts.length * ih + 8
+        const ih = 20, listH = opts.length * ih + 6
         let ly = pop.by + 2
-        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 33 - listH)
+        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 25 - listH)
         ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(pop.bx, ly, pop.bw, listH); ctx.fill()
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
         ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
         const cur = wmStr(pop.key)
         opts.forEach((o, i) => {
-            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, labels[o] ?? o, () => { setWm(pop!.key, o); wmOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, labels[o] ?? o, () => { setWm(pop!.key, o); wmOpen = null; ctrl.requestDraw() }, cur === o, g.col, "", 9)
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { wmOpen = null; ctrl.requestDraw() } })
     }
 
     if (wmColorPick) {
         const p = wmColorPick
-        const pW = 300, pH = 300
+        const pW = 232, pH = 228
         const px = x + w - pW - 8
-        let py = colAnchor != null ? colAnchor + 30 : visTop + (visHeight - pH) / 2
+        let py = colAnchor != null ? colAnchor + 24 : visTop + (visHeight - pH) / 2
         if (py + pH > visBottom) py = Math.max(visTop, (colAnchor != null ? colAnchor - pH - 8 : visTop) )
-        const sx = px + 16, sy = py + 16, svw = 190, svh = 190
-        const hx = px + 16, hy = py + 232, hw = 190, hh = 18
+        const sx = px + 14, sy = py + 14, svw = 148, svh = 148
+        const hx = px + 14, hy = py + 172, hw = 148, hh = 14
         const [ar, ag, ab] = hsvToRgb(p.h, p.s, p.v)
         ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.98); ctx.rectangle(px, py, pW, pH); ctx.fill()
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
@@ -2196,10 +1368,10 @@ export const drawWm = (ctx, g, x, y, w) => {
         ctx.rectangle(sx + 0.5, sy + 0.5, svw - 1, svh - 1); ctx.stroke()
 
         ctx.setSourceRGB(ar / 255, ag / 255, ab / 255)
-        ctx.rectangle(px + 222, sy, 62, 156); ctx.fill()
+        ctx.rectangle(px + 170, sy, 48, 122); ctx.fill()
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.8); ctx.setLineWidth(1)
-        ctx.rectangle(px + 222.5, sy + 0.5, 61, 155); ctx.stroke()
-        txt(ctx, px + 222, sy + 176, rgbToHex([ar, ag, ab]), MONO, 10.5, g.accent, 0.95)
+        ctx.rectangle(px + 170.5, sy + 0.5, 47, 121); ctx.stroke()
+        txt(ctx, px + 170, sy + 138, `#${rgbToHex(ar, ag, ab)}`, MONO, 8, g.accent, 0.95)
 
         const ghu = new Cairo.LinearGradient(hx, 0, hx + hw, 0)
         for (let i = 0; i <= 6; i++) { const [r2, g2, b2] = hsvToRgb(i * 60, 1, 1); ghu.addColorStopRGB(i / 6, r2 / 255, g2 / 255, b2 / 255) }
@@ -2208,18 +1380,18 @@ export const drawWm = (ctx, g, x, y, w) => {
         ctx.rectangle(hx + 0.5, hy + 0.5, hw - 1, hh - 1); ctx.stroke()
 
         const ccx = sx + p.s * svw, ccy = sy + (1 - p.v) * svh
-        ctx.setSourceRGBA(0, 0, 0, 0.8); ctx.setLineWidth(1)
-        ctx.newPath(); ctx.arc(ccx, ccy, 8, 0, 2 * Math.PI); ctx.stroke()
-        ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.8)
-        ctx.newPath(); ctx.arc(ccx, ccy, 6.4, 0, 2 * Math.PI); ctx.stroke()
+        ctx.setSourceRGBA(0, 0, 0, 0.8); ctx.setLineWidth(0.8)
+        ctx.newPath(); ctx.arc(ccx, ccy, 6.2, 0, 2 * Math.PI); ctx.stroke()
+        ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.4)
+        ctx.newPath(); ctx.arc(ccx, ccy, 5, 0, 2 * Math.PI); ctx.stroke()
         const hcx = hx + (p.h / 360) * hw
-        ctx.setSourceRGBA(0, 0, 0, 0.8); ctx.setLineWidth(4)
-        ctx.newPath(); ctx.moveTo(hcx, hy - 4); ctx.lineTo(hcx, hy + hh + 4); ctx.stroke()
-        ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.6)
-        ctx.newPath(); ctx.moveTo(hcx, hy - 4); ctx.lineTo(hcx, hy + hh + 4); ctx.stroke()
+        ctx.setSourceRGBA(0, 0, 0, 0.8); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(hcx, hy - 3); ctx.lineTo(hcx, hy + hh + 3); ctx.stroke()
+        ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.2)
+        ctx.newPath(); ctx.moveTo(hcx, hy - 3); ctx.lineTo(hcx, hy + hh + 3); ctx.stroke()
 
-        drawBtn(ctx, g.push, px + 16, py + pH - 38, 96, 28, "THEME", () => { setWm(p.key, ""); closeWmPicker() }, false, [1, 0.4, 0.44], "", 11)
-        drawBtn(ctx, g.push, px + 124, py + pH - 38, 96, 28, "DONE", () => closeWmPicker(), true, g.col, "", 11)
+        drawBtn(ctx, g.push, px + 14, py + pH - 30, 70, 20, "THEME", () => { setWm(p.key, ""); closeWmPicker() }, false, [1, 0.4, 0.44], "", 8)
+        drawBtn(ctx, g.push, px + 92, py + pH - 30, 70, 20, "DONE", () => closeWmPicker(), true, g.col, "", 8)
 
         g.push({
             kind: "sld2", key: "wmPickSV", bx0: sx - 3, by0: sy - 3, bx1: sx + svw + 3, by1: sy + svh + 3,
@@ -2296,7 +1468,7 @@ let cfgExpand: Record<string, boolean> = {}
 let extPicker = ""
 sh("for c in zenity kdialog yad; do command -v $c >/dev/null 2>&1 && { echo $c; break; }; done").then((o) => { extPicker = String(o || "").trim() })
 
-const GROW_H = 34, GSEC_H = 46
+const GROW_H = 26, GSEC_H = 34
 const baseName = (p: string) => p.slice(p.lastIndexOf("/") + 1)
 const cfgLocked = (k: string): boolean => {
     let p = CFG_DEP[k]
@@ -2345,38 +1517,38 @@ const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
 
     if (r.t === "car") {
         const open = cfgExpand[r.k] === true
-        drawBtn(ctx, push, x + 16, ry + 4, 260, 24, `${open ? "▾" : "▸"}  ${r.label}`, () => { cfgExpand[r.k] = !open; cfgOpen = null; ctrl.requestDraw() }, open, open ? (USER.cyan as any) : (dis ? [0.5, 0.54, 0.58] : g.col), "", 12)
+        drawBtn(ctx, push, x + 16, ry + 4, 200, 18, `${open ? "▾" : "▸"}  ${r.label}`, () => { cfgExpand[r.k] = !open; cfgOpen = null; ctrl.requestDraw() }, open, dis ? [0.5, 0.54, 0.58] : g.col, "", 9)
         return
     }
 
-    txt(ctx, lx, ry + 21, r.label, TITLE, r.master ? 13 : 12, lcol, la, 1, r.master ? 0.3 : 0)
+    txt(ctx, lx, ry + 16, r.label, TITLE, r.master ? 10 : 9, lcol, la, 1, r.master ? 0.3 : 0)
 
     if (r.t === "tog") {
-        drawToggle(ctx, push, x + w - 58, ry + 4, cfgBool(r.k), () => { toggleCfg(r.k); cfgOpen = null; ctrl.requestDraw() }, dis, g.col, 1.35, USER.cyan as any)
+        drawToggle(ctx, push, x + w - 44, ry + 4, cfgBool(r.k), () => { toggleCfg(r.k); cfgOpen = null; ctrl.requestDraw() }, dis, g.col)
         return
     }
 
     if (r.t === "snd") {
         const cur = cfgStr(r.k)
         const shown = cur ? baseName(cur) : `DEFAULT :: ${CFG_FALLBACK[r.k] ?? ""}`
-        const tx = lx + 120
-        txt(ctx, tx, ry + 21, fitTxt(ctx, shown, MONO, 10.5, x + w - 140 - tx), MONO, 10.5, cur ? g.accent : g.col, dis ? 0.32 : cur ? 0.85 : 0.55)
-        drawBtn(ctx, push, x + w - 122, ry + 4, 76, 24, "PICK", () => pickSound(r.k), false, dis ? [0.5, 0.54, 0.58] : g.col, "", 12)
-        if (cur) drawBtn(ctx, push, x + w - 38, ry + 4, 32, 24, "×", () => { clearSound(r.k); ctrl.requestDraw() }, false, dis ? [0.5, 0.54, 0.58] : [1, 0.4, 0.44], "", 12)
+        const tx = lx + 92
+        txt(ctx, tx, ry + 16, fitTxt(ctx, shown, MONO, 8, x + w - 100 - tx), MONO, 8, cur ? g.accent : g.col, dis ? 0.32 : cur ? 0.85 : 0.55)
+        drawBtn(ctx, push, x + w - 90, ry + 4, 58, 18, "PICK", () => pickSound(r.k), false, dis ? [0.5, 0.54, 0.58] : g.col, "", 9)
+        if (cur) drawBtn(ctx, push, x + w - 26, ry + 4, 24, 18, "×", () => { clearSound(r.k); ctrl.requestDraw() }, false, dis ? [0.5, 0.54, 0.58] : [1, 0.4, 0.44], "", 10)
         return
     }
 
     const cur = cfgStr(r.k), open = cfgOpen === r.k
-    drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${METRIC_LABEL[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
+    drawBtn(ctx, push, x + w - 266, ry + 3, 264, 20, `${METRIC_LABEL[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 9.5)
 }
 
-export const drawConfig = (ctx, g, x, y, w) => {
+const drawConfig = (ctx, g, x, y, w) => {
     const gate = cfgOpen ? noPush : g.push
-    const bh = 38, half = (w - 10) / 2
-    drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col, "", 13)
-    drawBtn(ctx, gate, x + half + 10, y, half, bh, "RELOAD CYBERARCH", () => { reloadHyprland() }, false, g.col, "", 13)
+    const bh = 28, half = (w - 10) / 2
+    drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col)
+    drawBtn(ctx, gate, x + half + 10, y, half, bh, "RELOAD CYBERARCH", () => { reloadHyprland() }, false, g.col)
 
-    const visTop = y + bh + 20, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
+    const visTop = y + bh + 16, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
 
     const layout: { y: number; kind: "sec" | "row"; label: string; row?: CfgRow; keys?: string[] }[] = []
     let yAcc = 0
@@ -2404,15 +1576,15 @@ export const drawConfig = (ctx, g, x, y, w) => {
         const ry = visTop + it.y - kbScroll
         if (it.kind === "sec") {
             if (ry + GSEC_H < visTop || ry > visBottom) continue
-            sectionHeader(ctx, g, x, ry + 16, it.label, w - 92, 12)
-            const shown = ry >= visTop - 1 && ry + 24 <= visBottom + 1
-            drawBtn(ctx, shown ? gate : noPush, x + w - 88, ry + 1, 88, 22, "DEFAULTS", () => { resetCfg(it.keys ?? []); cfgOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 11)
+            sectionHeader(ctx, g, x, ry + 12, it.label, w - 66)
+            const shown = ry >= visTop - 1 && ry + 18 <= visBottom + 1
+            drawBtn(ctx, shown ? gate : noPush, x + w - 62, ry + 1, 62, 16, "DEFAULTS", () => { resetCfg(it.keys ?? []); cfgOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 8)
             continue
         }
         if (ry + GROW_H < visTop || ry > visBottom) continue
         const hit = ry >= visTop - 1 && ry + GROW_H <= visBottom + 1
         const r = it.row!
-        if (r.t === "sel" && cfgOpen === r.k) pop = { key: r.k, bx: x + w - 302, by: ry + 29, bw: 300 }
+        if (r.t === "sel" && cfgOpen === r.k) pop = { key: r.k, bx: x + w - 266, by: ry + 23, bw: 264 }
         drawCfgRow(ctx, g, x, ry, w, r, hit && !cfgOpen)
     }
     ctx.restore()
@@ -2428,15 +1600,15 @@ export const drawConfig = (ctx, g, x, y, w) => {
 
     if (pop) {
         const opts = GAUGE_OPTS[pop.key] ?? []
-        const ih = 27, listH = opts.length * ih + 8
+        const ih = 20, listH = opts.length * ih + 6
         let ly = pop.by + 2
-        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 33 - listH)
+        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 25 - listH)
         ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(pop.bx, ly, pop.bw, listH); ctx.fill()
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
         ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
         const cur = cfgStr(pop.key)
         opts.forEach((o, i) => {
-            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, METRIC_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, METRIC_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, g.col, "", 9)
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
     }

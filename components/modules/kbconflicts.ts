@@ -1,4 +1,4 @@
-import { execAsync } from "astal"
+import { execAsync } from "ags/process"
 import { CYBER_DIR } from "../../env.ts"
 import { createModal, drawBtn, registerCModal } from "./cmodal.ts"
 import { txt as gtxt, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"

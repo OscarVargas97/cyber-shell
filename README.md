@@ -1,3 +1,76 @@
+# cyber-shell
+
+HUD de escritorio estilo *netrunner* para Hyprland, sobre AGS v3 / Astal.
+Fork de [ARCANGEL0/CyberArch-Shell](https://github.com/ARCANGEL0/CyberArch-Shell)
+adaptado a **NixOS**. Es la barra/HUD de [workos](https://github.com/OscarVargas97/workos).
+
+> **Para agentes de IA:** [`AGENTS.md`](./AGENTS.md). Crédito del diseño
+> original: su autor (ver [`ORIGIN.md`](./ORIGIN.md)); el upstream no
+> declara licencia.
+
+## Qué hace
+
+- Barra superior con stats (CPU, RAM, red, batería), reloj, clima, tray y media.
+- Notificaciones propias (reemplaza a mako) y centro de mensajes.
+- Launcher de aplicaciones (rueda animada) y dock con el atajo de cada ícono.
+- Panel de atajos (`Super+K`) que lee los binds de Hyprland en vivo.
+- 3 planes de rendimiento: `Super+F1` full, `Super+F2` balanced, `Super+F3` performance.
+- Paneles de audio, pantalla, wifi, bluetooth.
+
+## Usarlo con workos (NixOS)
+
+No hace falta instalar nada: `workos` lo trae como input del flake
+(`flake = false`) y `home-manager/cyber-shell.nix` arma el comando
+`cyber-shell` (`ags run --gtk 3 core.ts` con las librerías de Astal que
+necesita) y lo arranca Hyprland. **No uses `install.sh`**: es el
+instalador de Arch del upstream.
+
+La versión que usa tu sistema está pineada en el `flake.lock` de `workos`.
+Cuando `workos` la actualiza, la recibís al actualizar tu repo privado:
+
+```bash
+scripts/check.sh --lock     # en workos-private: pinea el último workos
+rebuild
+```
+
+## Desarrollar
+
+1. Cloná este repo al lado de `workos` (ej. `~/Repos/Externos/cyber-shell`).
+2. Corrélo en vivo sin rebuild, en una sesión de Hyprland de workos:
+
+   ```bash
+   pkill -f "ags run"; CYBER_SHELL_DIR=~/Repos/Externos/cyber-shell cyber-shell &
+   ```
+
+3. Para probar el cambio como lo instalaría Nix, sin pushear, desde tu repo
+   privado:
+
+   ```bash
+   sudo nixos-rebuild test --flake .#$(hostname) \
+     --override-input workos/cyberShell git+file://$HOME/Repos/Externos/cyber-shell
+   ```
+
+4. Commiteá y pusheá acá; en `workos`, `nix flake update cyberShell` +
+   commit + push; en el repo privado, `scripts/check.sh --lock` + `rebuild`.
+
+Estructura:
+
+| Ruta | Qué es |
+|---|---|
+| `core.ts` | Entrada: arma ventanas, paneles y el socket `ags request -i cyberpunk <comando>` |
+| `components/modules/` | Cada panel/widget (barra, dock, launcher, notificaciones, shortcuts, config) |
+| `components/style/` | SCSS del tema (se compila con `sassc`) |
+| `config/` | Datos editables: `city.json` (clima), `keybinds.lua` |
+| `assets/` | Fuentes, íconos, imágenes (las fuentes las instala workos en `~/.local/share/fonts/cyberarch`) |
+| `scripts/` | Utilidades (minimapa, conflictos de atajos) |
+
+Cambios respecto al upstream: [`ORIGIN.md`](./ORIGIN.md).
+
+---
+
+<details>
+<summary><b>README original del upstream (instalación en Arch Linux)</b></summary>
+
 
 <div align="center">
 
@@ -308,3 +381,5 @@ suggestions are welcome! :)
 
 </div>
 
+
+</details>

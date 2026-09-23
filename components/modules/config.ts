@@ -1,6 +1,6 @@
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
-import { execAsync } from "astal"
+import { execAsync } from "ags/process"
 import { USER_DIR } from "../../env.ts"
 
 
@@ -60,6 +60,16 @@ export const sndFile = (k: string, fallback: string): string => {
 }
 
 
+// Los valores string de config (sndNotifFile, sndWheelActive, etc.) son
+// rutas de archivo de sonido que terminan interpoladas sin re-escapar
+// dentro de `sh -c "..."` en varios módulos (notifpopup.ts,
+// notifmessages.ts, appsmenu.ts). Si user_config.lua estuviera
+// corrompido con un valor tipo `$(comando)` o con una comilla suelta,
+// eso ejecutaría código arbitrario. Se corta acá, en el único lugar por
+// el que pasan todos los valores al cargarse, en vez de escapar en cada
+// sitio de uso por separado.
+const isSafePathValue = (s: string): boolean => !/["'`$\\;|&\n]/.test(s)
+
 export const loadUserConfig = (): void => {
  try {
      if (!GLib.file_test(CFG_PATH, GLib.FileTest.EXISTS)) return
@@ -69,7 +79,11 @@ export const loadUserConfig = (): void => {
          const m = /cfg\["(\w+)"\]\s*=\s*(true|false|"([^"]*)")/.exec(line)
          if (!m || !CFG_KEYS.includes(m[1])) continue
          if (typeof DEF[m[1]] === "boolean") { if (m[2] !== "true" && m[2] !== "false") continue; CFG[m[1]] = m[2] === "true" }
-         else { if (m[3] === undefined) continue; CFG[m[1]] = m[3] }
+         else {
+             if (m[3] === undefined) continue
+             if (!isSafePathValue(m[3])) { print(`[cfg] valor inseguro para ${m[1]}, ignorado: ${m[3]}`); continue }
+             CFG[m[1]] = m[3]
+         }
      }
  } catch (e) { print("[cfg] load:", e) }
 }
@@ -110,6 +124,36 @@ export const resetCfg = (keys: string[]): void => {
  saveUserConfig()
  if (hypr) applyHyprAnim()
  notifyConfigChange()
+}
+
+// 3 planes de rendimiento: "animWheel" (el menu de
+// apps) queda SIEMPRE en true, en los 3 planes. Lo
+// que baja es todo lo demas: los otros loops de redibujado propios de
+// cyber-shell, y el blur de Hyprland (decoration:blur, no lo controla
+// este archivo - es config.ts propio de Hyprland, se toca por hyprctl
+// directo, mismo mecanismo que applyHyprAnim usa para animations).
+export const PERF_PRESETS = ["full", "balanced", "performance"] as const
+export type PerfPreset = (typeof PERF_PRESETS)[number]
+
+const PRESET_CFG: Record<PerfPreset, Record<string, CfgVal>> = {
+ full: { anim: true, animGlitch: true, animModal: true, animGauge: true, animNotif: true, animMusic: true, animWheel: true },
+ balanced: { anim: true, animGlitch: false, animModal: true, animGauge: false, animNotif: true, animMusic: false, animWheel: true },
+ performance: { anim: true, animGlitch: false, animModal: false, animGauge: false, animNotif: false, animMusic: false, animWheel: true },
+}
+const PRESET_BLUR: Record<PerfPreset, { enabled: boolean; passes: number }> = {
+ full: { enabled: true, passes: 3 },
+ balanced: { enabled: true, passes: 1 },
+ performance: { enabled: false, passes: 1 },
+}
+
+export const applyPerfPreset = (name: string): PerfPreset | null => {
+ if (!(PERF_PRESETS as readonly string[]).includes(name)) return null
+ const preset = name as PerfPreset
+ for (const [k, v] of Object.entries(PRESET_CFG[preset])) setCfg(k, v)
+ const blur = PRESET_BLUR[preset]
+ execAsync(["hyprctl", "keyword", "decoration:blur:enabled", blur.enabled ? "1" : "0"]).catch(() => {})
+ if (blur.enabled) execAsync(["hyprctl", "keyword", "decoration:blur:passes", String(blur.passes)]).catch(() => {})
+ return preset
 }
 
 
