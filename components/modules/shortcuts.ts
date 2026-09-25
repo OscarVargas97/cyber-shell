@@ -14,12 +14,7 @@ import { execAsync } from "ags/process"
 import GLib from "gi://GLib"
 import Gtk from "gi://Gtk?version=3.0"
 import Gdk from "gi://Gdk?version=3.0"
-
-const MOD_BITS: Array<[number, string]> = [
-    [64, "SUPER"], [8, "ALT"], [4, "CTRL"], [1, "SHIFT"],
-]
-const modmaskToStr = (mask: number): string =>
-    MOD_BITS.filter(([bit]) => (mask & bit) !== 0).map(([, name]) => name).join(" + ")
+import { modmaskToStr } from "./keymap.ts"
 
 const CATEGORY_ORDER = [
     "Aplicaciones", "Ventanas", "Ventanas (mouse)", "Workspaces", "Sistema", "Capturas", "HUD",

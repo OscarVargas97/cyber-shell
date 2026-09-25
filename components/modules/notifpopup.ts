@@ -11,6 +11,7 @@ import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr, notifIconTint } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
+import { keyForAgsRequest } from "./keymap.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -50,6 +51,14 @@ const CX = 68, FW = 400, BASEV = 74, FH = 43, STEP = 55
 let msgs: any[] = []
 let intro = 0, closing = false, lastActivity = 0, holdUntil = 0
 let area: any = null, loop: any = null, win: any = null
+
+// Teclas resueltas en vivo contra hyprctl (ver keymap.ts) - "E"/"X" de acá
+// abajo son solo el valor por defecto hasta que loadKeys() resuelva.
+let kRead = "E", kDismiss = "X"
+const loadKeys = () => {
+    keyForAgsRequest("notif-read").then((k) => { kRead = k }).catch(() => { })
+    keyForAgsRequest("notif-dismiss").then((k) => { kDismiss = k }).catch(() => { })
+}
 
 const projPath = (ctx: any, pts: [number, number][]) => { ctx.newPath(); pts.forEach(([u, v], i) => { const [x, y] = plane.project(u, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y) }); ctx.closePath() }
 const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0, tint: [number, number, number] | null = null) => {
@@ -179,9 +188,9 @@ const draw = (ctx: any) => {
     const rA = seg(intro, 0.8, 1) * stackA
     if (rA > 0.01) {
         const uR = CX + FW, actionCol = neonBtn.value ? NEON.press : NEON.notiflbl
-        keycap(ctx, uR - 24, lowY, "E", rA, -1)
+        keycap(ctx, uR - 24, lowY, kRead, rA, -1)
         tiltText(ctx, plane, uR - 34, lowY + 15, "READ MESSAGE", TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
-        keycap(ctx, uR - 165, lowY, "X", rA)
+        keycap(ctx, uR - 165, lowY, kDismiss, rA)
         tiltText(ctx, plane, uR - 175, lowY + 15, "DISMISS", TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
     }
 
@@ -302,6 +311,7 @@ const add = (n: any) => {
 }
 
 export const NotifPopupWindow = () => {
+    loadKeys()
     area = DrawingArea({}); area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * SCALE), Math.round((MARGIN_T + plane.height + 20) * SCALE))
     onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })

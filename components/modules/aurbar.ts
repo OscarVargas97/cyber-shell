@@ -13,6 +13,7 @@ import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, tintSurfaceFlat, imgTint, circleTint, neonBtn, aurTitleTint } from "./colors.ts"
 import { animOn } from "./config.ts"
+import { keyForAgsRequest } from "./keymap.ts"
 
 const Cairo = (imports as any).cairo
 
@@ -57,6 +58,17 @@ let mode = "update", autoT: any = null
 let cTitle = "AUR UPDATE AVAILABLE!", cLabel = "NEW GIGS AVAILABLE:", cValue = "", cShowU = true
 let cUKey = "U", cULbl = "UPGRADE"
 let tVer = "", tLocal = "", tBody: string[] = [], tDismissed = false, aurPending = false
+
+// Teclas resueltas en vivo contra hyprctl (ver keymap.ts) - los "G"/"A"/"J"
+// de acá abajo son solo el valor por defecto hasta que loadKeys() resuelva,
+// para no mostrar nada en blanco si el popup se dispara antes de tiempo.
+let kAurUpgrade = "G", kThemeUpdate = "A", kDismiss = "J"
+
+const loadKeys = () => {
+    keyForAgsRequest("aur-upgrade").then((k) => { kAurUpgrade = k }).catch(() => { })
+    keyForAgsRequest("cyber-update").then((k) => { kThemeUpdate = k }).catch(() => { })
+    keyForAgsRequest("update-dismiss").then((k) => { kDismiss = k }).catch(() => { })
+}
 
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
@@ -143,7 +155,7 @@ const placeWin = () => {
 export const showAurBar = () => {
     if (dismissed || count <= 0 || phase !== "hidden") return
     mode = "update"; cTitle = "AUR UPDATE AVAILABLE!"; cLabel = "NEW GIGS AVAILABLE:"; cValue = `${count}`; cShowU = true
-    cUKey = "U"; cULbl = "UPGRADE"
+    cUKey = kAurUpgrade; cULbl = "UPGRADE"
     placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
@@ -152,7 +164,7 @@ export const showAurBar = () => {
 export const showThemeBar = () => {
     if (tDismissed || !tVer || phase !== "hidden") return
     mode = "theme"; cTitle = `NEW VERSION V${tVer} AVAILABLE`; cLabel = "UPDATE CYBERARCH NOW?"; cValue = ""; cShowU = true
-    cUKey = "A"; cULbl = "UPDATE NOW"
+    cUKey = kThemeUpdate; cULbl = "UPDATE NOW"
     placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
@@ -306,9 +318,9 @@ const draw = (ctx: any) => {
             const w1 = 26 + uwidth(ctx, TITLE, 11, cULbl), gap = 18
             let tx = BARX + BW - (w1 + gap + w2)
             tx += ptip(ctx, tx, TIPY, cUKey, cULbl, A) + gap
-            ptip(ctx, tx, TIPY, "J", "DISMISS", A)
+            ptip(ctx, tx, TIPY, kDismiss, "DISMISS", A)
         } else {
-            ptip(ctx, BARX + BW - w2, TIPY, "J", "DISMISS", A)
+            ptip(ctx, BARX + BW - w2, TIPY, kDismiss, "DISMISS", A)
         }
     }
 }
@@ -338,6 +350,7 @@ const bootCheck = () => {
 }
 
 export const AurBarWindow = () => {
+    loadKeys()
     area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
     onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
