@@ -39,10 +39,7 @@ export const NEON: Record<string, RGB> = {
     hudcyan: [85, 222, 255],
     darkred: [120, 36, 40],
     notifbadge: [240, 24, 20],
-    aurgreen: [43, 225, 133],
-    aurbrt: [150, 255, 200],
     aurblack: [6, 14, 9],
-    aurwht: [232, 255, 240],
     f25: [242, 91, 86],
     overlay: [255, 42, 58],
     sysveil: [255, 42, 58],
@@ -69,10 +66,6 @@ export const NEON: Record<string, RGB> = {
     netup: [94, 244, 248],
     mktacc: [255, 222, 105],
     mkthov: [255, 178, 36],
-    aurbg: [6, 14, 9],
-    aurfg: [232, 255, 240],
-    auricon: [255, 20, 45],
-    aurlbl: [43, 225, 133],
     notifphone: [94, 244, 248],
     notifmail: [108, 230, 246],
     notifheads: [255, 214, 46],
@@ -112,10 +105,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [85, 222, 255],
         darkred: [120, 36, 40],
         notifbadge: [240, 24, 20],
-        aurgreen: [43, 225, 133],
-        aurbrt: [150, 255, 200],
         aurblack: [6, 14, 9],
-        aurwht: [232, 255, 240],
         f25: [242, 91, 86],
         pure: [255, 255, 255],
         glassacc: [196, 248, 255],
@@ -143,10 +133,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [2, 155, 156],
         darkred: [80, 41, 11],
         notifbadge: [187, 56, 160],
-        aurgreen: [187, 56, 160],
-        aurbrt: [217, 119, 191],
         aurblack: [42, 8, 36],
-        aurwht: [224, 214, 200],
         f25: [187, 56, 160],
         pure: [232, 226, 216],
         glassacc: [1, 180, 178],
@@ -184,10 +171,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [255, 182, 222],
         darkred: [255, 170, 215],
         notifbadge: [255, 182, 222],
-        aurgreen: [255, 205, 236],
-        aurbrt: [255, 248, 252],
         aurblack: [50, 30, 44],
-        aurwht: [255, 248, 252],
         f25: [255, 170, 215],
         pure: [255, 248, 252],
         glassacc: [255, 248, 252],
@@ -213,10 +197,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [255, 60, 60],
         darkred: [255, 32, 32],
         notifbadge: [255, 60, 60],
-        aurgreen: [255, 70, 50],
-        aurbrt: [255, 210, 205],
         aurblack: [50, 10, 14],
-        aurwht: [255, 210, 205],
         f25: [255, 32, 32],
         pure: [255, 210, 205],
         glassacc: [255, 210, 205],
@@ -242,10 +223,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [255, 255, 255],
         darkred: [170, 200, 220],
         notifbadge: [255, 255, 255],
-        aurgreen: [225, 250, 255],
-        aurbrt: [255, 255, 255],
         aurblack: [40, 56, 84],
-        aurwht: [255, 255, 255],
         f25: [255, 255, 255],
         pure: [255, 255, 255],
         glassacc: [255, 255, 255],
@@ -271,10 +249,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [55, 210, 205],
         darkred: [150, 110, 170],
         notifbadge: [255, 55, 190],
-        aurgreen: [45, 220, 210],
-        aurbrt: [250, 232, 250],
         aurblack: [35, 15, 55],
-        aurwht: [250, 232, 250],
         f25: [255, 50, 160],
         pure: [250, 232, 250],
         glassacc: [80, 255, 140],
@@ -300,10 +275,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [94, 244, 248],
         darkred: [255, 208, 60],
         notifbadge: [94, 244, 248],
-        aurgreen: [255, 214, 90],
-        aurbrt: [250, 246, 228],
         aurblack: [40, 50, 84],
-        aurwht: [250, 246, 228],
         f25: [255, 208, 60],
         pure: [250, 246, 228],
         glassacc: [250, 246, 228],
@@ -329,10 +301,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         hudcyan: [255, 60, 40],
         darkred: [0, 255, 120],
         notifbadge: [255, 60, 40],
-        aurgreen: [60, 255, 120],
-        aurbrt: [200, 255, 220],
         aurblack: [10, 22, 16],
-        aurwht: [200, 255, 220],
         f25: [0, 255, 120],
         pure: [200, 255, 220],
         glassacc: [200, 255, 220],
@@ -344,7 +313,7 @@ export const USER: Record<string, [number, number, number]> = {}
 for (const k of Object.keys(NEON)) USER[k] = f(NEON[k])
 
 export const USER_A: Record<string, number> = {
-    modalbg: 1, wheelbg: 1, maptile: 1, aurbg: 1, notifbg: 1, radiohdrbg: 1, radiotrkbg: 1,
+    modalbg: 1, wheelbg: 1, maptile: 1, notifbg: 1, radiohdrbg: 1, radiotrkbg: 1,
 }
 
 const OVR: Record<string, boolean> = {}
@@ -364,7 +333,6 @@ const DERIVE: Record<string, [string, Mul]> = {
     dockhh: ["press", 1],
     launchico: ["maptile", 1],
     launchlbl: ["dock", 1],
-    auricon: ["red", 1],
     notifphone: ["press", 1],
     mapaccent: ["cyan", 1],
     netchip: ["netinfo", 1],
@@ -372,9 +340,6 @@ const DERIVE: Record<string, [string, Mul]> = {
     netup: ["cyan", 1],
     mktacc: ["netinfo", 1],
     mkthov: ["amber", 1],
-    aurbg: ["aurblack", 1],
-    aurfg: ["aurwht", 1],
-    aurlbl: ["aurgreen", 1],
     notifmail: ["notifcyn", 1],
     notifheads: ["notifyel", 1],
     notiftitle: ["notifcyn", 1],
@@ -536,14 +501,6 @@ const NEON_BTN: Record<string, boolean> = { DARK: true }
 export const neonBtn = { value: false }
 const updateNeonBtn = (name: string) => { neonBtn.value = NEON_BTN[name] ?? false }
 
-const CIRCLE_TINT: Record<string, RGB> = { BLADE: [187, 56, 160] }
-export const circleTint = { value: null as RGB | null }
-const updateCircleTint = (name: string) => {
-    const e = CIRCLE_TINT[name]
-    if (!OVR.auricon && e) setColor("auricon", e, false)
-    circleTint.value = (e || OVR.auricon) ? NEON.auricon : null
-}
-
 const LAUNCHER_TINT: Record<string, RGB> = { SYNTHWAVE: [45, 220, 210] }
 export const launcherTint = { value: null as RGB | null }
 const updateLauncherTint = (name: string) => {
@@ -582,11 +539,6 @@ const updateNotifBubble = (name: string) => {
 export const notifIconTint = { value: null as RGB | null }
 const updateNotifIconTint = (name: string) => {
     notifIconTint.value = curPalette === "BLADE" ? NEON.notifphone : null
-}
-
-export const aurTitleTint = { value: null as RGB | null }
-const updateAurTitleTint = (name: string) => {
-    aurTitleTint.value = curPalette === "BLADE" ? NEON.aurbrt : null
 }
 
 const changeBus: Array<() => void> = []
@@ -637,13 +589,11 @@ const applyDerived = (name: string) => {
     updateHudSoft(name)
     updateGlassMode(name)
     updateNeonBtn(name)
-    updateCircleTint(name)
     updateLauncherTint(name)
     updateLauncherLabelTint(name)
     updateRadioBg(name)
     updateNotifBubble(name)
     updateNotifIconTint(name)
-    updateAurTitleTint(name)
     applyShellTheme(name)
 }
 

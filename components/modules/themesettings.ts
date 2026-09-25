@@ -191,10 +191,6 @@ const SECTIONS: [string, ColRow[]][] = [
         ["netup", "NET UPLOAD", false],
     ]],
     ["// POPUPS", [
-        ["aurbg", "AUR FRAME BACKGROUND", true],
-        ["aurfg", "AUR FRAME FOREGROUND", false],
-        ["auricon", "AUR ICON", false],
-        ["aurlbl", "AUR LABELS", false],
         ["notifbadge", "NOTIFICATION BADGE", false],
         ["notifphone", "NOTIFICATION PHONE", false],
         ["notifmail", "NOTIFICATION MAIL", false],
