@@ -152,7 +152,7 @@ export const showAurBar = () => {
 export const showThemeBar = () => {
     if (tDismissed || !tVer || phase !== "hidden") return
     mode = "theme"; cTitle = `NEW VERSION V${tVer} AVAILABLE`; cLabel = "UPDATE CYBERARCH NOW?"; cValue = ""; cShowU = true
-    cUKey = "Q"; cULbl = "UPDATE NOW"
+    cUKey = "A"; cULbl = "UPDATE NOW"
     placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
