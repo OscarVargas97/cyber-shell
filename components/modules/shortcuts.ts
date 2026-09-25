@@ -1,4 +1,4 @@
-// Panel de shortcuts (Mod+K) - pedido de Oscar mientras aprende
+// Panel de shortcuts (Mod+K) - para aprender
 // Hyprland/Wayland. Todo sale de fuentes en vivo, no de una lista a mano
 // que se pueda desincronizar de la config real:
 //   - binds de Hyprland: `hyprctl binds -j`, categorizados por la

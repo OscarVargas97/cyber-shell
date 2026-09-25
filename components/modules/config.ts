@@ -126,8 +126,8 @@ export const resetCfg = (keys: string[]): void => {
  notifyConfigChange()
 }
 
-// 3 planes de rendimiento (pedido de Oscar): "animWheel" (el menu de
-// apps - la que le encanta) queda SIEMPRE en true, en los 3 planes. Lo
+// 3 planes de rendimiento: "animWheel" (el menu de
+// apps) queda SIEMPRE en true, en los 3 planes. Lo
 // que baja es todo lo demas: los otros loops de redibujado propios de
 // cyber-shell, y el blur de Hyprland (decoration:blur, no lo controla
 // este archivo - es config.ts propio de Hyprland, se toca por hyprctl

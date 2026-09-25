@@ -61,8 +61,8 @@ const HLAYOUT: { k: string; x: number; y: number; w: number; h: number }[] = [
 
 const tileOf = (k: string) => [...VERT_TILES, ...HORIZ_TILES].find(t => t.key === k)!
 
-// Tooltip nativo de GTK con el shortcut real de cada tile (pedido de
-// Oscar: se ve la letra en el badge pero no el modificador, y una
+// Tooltip nativo de GTK con el shortcut real de cada tile (se ve la
+// letra en el badge pero no el modificador, y una
 // leyenda fija al lado del dock arruinaba la estética). Reusa `sc` -
 // la misma letra que ya dibuja drawBadgeBox - no hay una segunda lista
 // de combos que se pueda desincronizar de hyprland.nix. Solo aparece
