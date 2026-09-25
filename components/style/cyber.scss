@@ -318,10 +318,22 @@ tooltip label {
     color: rgba(228, 240, 255, 0.55);
     padding: 0 0 10px 0;
 }
+// Fila de dos columnas (tecla | descripción) en vez de un solo Label con
+// texto pre-alineado a mano con espacios: esa alineación sólo funciona en
+// una fuente monoespaciada de verdad y con Pango no lo es, así que con
+// combos largos (ej. binds de herdr o de Claude Code) las descripciones
+// quedaban todas desalineadas entre sí. Acá cada columna tiene su propio
+// ancho real (ver KEY_COL_CHARS en shortcuts.ts), así que alinean siempre.
 .shortcut-row {
+    padding: 2px 0 2px 10px;
+}
+.shortcut-key {
+    font-family: "Tektur", monospace; font-size: 12px; font-weight: 700;
+    color: $cyan;
+}
+.shortcut-action {
     font-family: "Tektur", monospace; font-size: 12px;
     color: rgba(228, 240, 255, 0.85);
-    padding: 2px 0 2px 10px;
 }
 // Una categoría por página (antes eran encabezados dentro de la misma
 // lista larga - con ~55 binds ya no entraba cómodo scrolleando todo).

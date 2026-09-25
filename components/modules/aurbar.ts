@@ -154,6 +154,7 @@ const placeWin = () => {
 
 export const showAurBar = () => {
     if (dismissed || count <= 0 || phase !== "hidden") return
+    loadKeys()
     mode = "update"; cTitle = "AUR UPDATE AVAILABLE!"; cLabel = "NEW GIGS AVAILABLE:"; cValue = `${count}`; cShowU = true
     cUKey = kAurUpgrade; cULbl = "UPGRADE"
     placeWin()
@@ -163,6 +164,7 @@ export const showAurBar = () => {
 
 export const showThemeBar = () => {
     if (tDismissed || !tVer || phase !== "hidden") return
+    loadKeys()
     mode = "theme"; cTitle = `NEW VERSION V${tVer} AVAILABLE`; cLabel = "UPDATE CYBERARCH NOW?"; cValue = ""; cShowU = true
     cUKey = kThemeUpdate; cULbl = "UPDATE NOW"
     placeWin()

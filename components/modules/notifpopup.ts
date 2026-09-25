@@ -282,6 +282,7 @@ export const notifDismiss = () => {
 }
 
 const add = (n: any) => {
+    loadKeys()
     const appName = (n?.app_name || "").toString().trim()
     const summary = (n?.summary || "").toString().trim()
     const body = (n?.body || "").toString().replace(/\s+/g, " ").trim()
