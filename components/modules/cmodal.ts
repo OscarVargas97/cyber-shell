@@ -21,6 +21,7 @@ import { startModalStats, stopModalStats } from "./sys.ts"
 import { ThemesCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
+import { AI_USAGE_ERR_TEXT, fmtAiUsageEta, type AiUsage, type UsageWindow } from "./aiusage.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -1053,6 +1054,80 @@ const BatCtrl = () => {
     return ctrl
 }
 
+const aiBarColor = (pct: number): [number, number, number] =>
+    pct >= 90 ? USER.red : pct >= 70 ? USER.amber : USER.green
+
+const aiBar = (ctx, x: number, y: number, w: number, h: number, pct: number, col: [number, number, number]) => {
+    ctx.setSourceRGBA(col[0], col[1], col[2], 0.16); ctx.rectangle(x, y, w, h); ctx.fill()
+    ctx.setSourceRGBA(col[0], col[1], col[2], 0.92); ctx.rectangle(x, y, w * Math.max(0, Math.min(100, pct)) / 100, h); ctx.fill()
+}
+
+const AiUsageCtrl = () => {
+    let usage: AiUsage = { ok: false }
+    let ctrl: any
+    let rateLimitedUntil = 0
+
+    const refresh = () => {
+        if (Date.now() < rateLimitedUntil) return
+        sh(`python3 "${CYBER_DIR}/scripts/ai-usage.py"`).then((o) => {
+            try { usage = JSON.parse(o.trim()) } catch { usage = { ok: false, error: "connection_failed" } }
+            if (usage.error === "rate_limited") rateLimitedUntil = Date.now() + 5 * 60 * 1000
+            ctrl.requestDraw()
+        })
+    }
+
+    ctrl = createModal({
+        name: "aiusage", tabTitle: "CLAUDE CODE · USAGE", W: 360, H: 280,
+        onOpen: refresh, poll: refresh, pollMs: 90000,
+        draw: (ctx, g) => {
+            const x = g.X + 20, w = g.w - 40
+            let cy = g.Y + HEADER + 24
+
+            if (!usage.ok) {
+                const msg = AI_USAGE_ERR_TEXT[usage.error ?? ""] ?? "SIN DATOS"
+                txt(ctx, x, cy + 10, msg, MONO, 10.5, g.col, 0.85)
+                return
+            }
+
+            if (usage.plan) {
+                txt(ctx, x, cy, `PLAN: ${usage.plan.toUpperCase()}`, MONO, 9, g.col, 0.55)
+                cy += 22
+            }
+
+            const rows: [string, UsageWindow | undefined][] = [
+                ["SESSION (5H)", usage.session],
+                ["WEEKLY", usage.weekly],
+            ]
+            for (const [label, win] of rows) {
+                if (!win || win.pct === null || win.pct === undefined) continue
+                const col = aiBarColor(win.pct)
+                ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(13)
+                txt(ctx, x, cy + 12, label, TITLE, 13, g.accent, 0.95)
+                const pctTxt = `${Math.round(win.pct)}%`
+                const pw = ctx.textExtents(pctTxt).width
+                txt(ctx, x + w - pw, cy + 12, pctTxt, TITLE, 13, col, 0.98)
+                aiBar(ctx, x, cy + 20, w, 8, win.pct, col)
+                txt(ctx, x, cy + 40, fmtAiUsageEta(win.resets_at), MONO, 8.5, g.col, 0.55)
+                cy += 62
+            }
+
+            const extra = usage.extra_usage
+            if (extra?.enabled) {
+                txt(ctx, x, cy + 12, "EXTRA USAGE", TITLE, 13, g.accent, 0.95)
+                const used = (extra.used_usd ?? 0).toFixed(2)
+                const limitTxt = extra.limit_usd ? `/ $${extra.limit_usd.toFixed(2)}` : ""
+                txt(ctx, x, cy + 32, `$${used} ${limitTxt}`, MONO, 10, g.col, 0.8)
+                cy += 46
+            }
+
+            if (usage.resets_available) {
+                txt(ctx, x, cy + 12, `${usage.resets_available} RESET GRANT${usage.resets_available > 1 ? "S" : ""} DISPONIBLE${usage.resets_available > 1 ? "S" : ""}`, MONO, 9, USER.dock, 0.85)
+            }
+        },
+    })
+    return ctrl
+}
+
 const SYSY: [number, number, number] = USER.amber
 const SYSC: [number, number, number] = USER.dock
 const SYSR: [number, number, number] = USER.overlay
@@ -1835,7 +1910,7 @@ const sysGet = () => {
   }
   return sysInst
 }
-export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemesCtrl())]
+export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(AiUsageCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemesCtrl())]
 
 
 export const toggleModal = (name) => {
