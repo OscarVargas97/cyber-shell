@@ -14,6 +14,11 @@
 //     nunca hace falta tocar este archivo a mano.
 // Con ~90 binds ya no entra cómodo en una sola lista scrolleable - una
 // página por categoría/app, navegable con Izq/Der (o clickeando las flechas).
+// El panel tiene dos vistas (Arriba/Abajo alterna entre ellas):
+//   - SHORTCUTS: atajos de teclado (lo de arriba).
+//   - COMANDOS: la CLI de cada herramienta del sistema, tipo página man -
+//     un listado de subcomandos con su descripción, sacado en vivo de
+//     `<comando> --help` (ver "Vista COMANDOS" más abajo).
 import { Window, Box, Button, Label, Scrollable, Layer, Anchor, Exclusivity, Keymode } from "./widget.ts"
 import { execAsync } from "ags/process"
 import GLib from "gi://GLib"
@@ -292,22 +297,201 @@ const collectHermes = async (): Promise<Array<[string, string]>> => {
     return parseHermesKeys(text)
 }
 
+// ZSH: no hay forma de pedirle a zsh en vivo "qué binds tenés" (no expone
+// nada como `hyprctl binds -j`), así que se parsea `bindkey` tal como
+// está escrito en home-manager/zsh.nix - mismo criterio que HERMES arriba:
+// leer el código real en vez de copiarlo a mano acá.
+const ZSH_NIX_PATH = `${GLib.get_home_dir()}/Repos/Externos/workos/workos/home-manager/zsh.nix`
+
+const ZSH_WIDGET_LABELS: Record<string, string> = {
+    "sudo-command-line": 'Anteponer/quitar "sudo " a la línea de comando actual',
+}
+
+const humanizeZshKeySeq = (raw: string): string =>
+    raw.replace(/\\e/g, "Esc ").replace(/\\C-/g, "Ctrl+").trim().replace(/\s+/g, " ")
+
+const parseZshBindkeys = (text: string): Array<[string, string]> => {
+    const rows: Array<[string, string]> = []
+    for (const raw of text.split("\n")) {
+        const line = raw.trim()
+        if (/^bindkey\s+-e\s*$/.test(line)) {
+            rows.push(["(bindkey -e)", "Modo de edición emacs/readline - habilita los atajos estándar heredados de zsh (Ctrl+A/E/R, Alt+., …), no declarados uno por uno en este archivo"])
+            continue
+        }
+        const m = line.match(/^bindkey\s+"([^"]+)"\s+(\S+)/)
+        if (m) {
+            const label = ZSH_WIDGET_LABELS[m[2]] || m[2].replace(/-/g, " ")
+            rows.push([humanizeZshKeySeq(m[1]), label])
+        }
+    }
+    return rows
+}
+
+const collectZsh = async (): Promise<Array<[string, string]>> =>
+    parseZshBindkeys(await readFile(ZSH_NIX_PATH))
+
 const APP_SOURCES: AppSource[] = [
     { title: "KITTY", collect: collectKitty },
     { title: "HERDR", collect: collectHerdr },
     { title: "CLAUDE CODE", collect: collectClaudeCode },
     { title: "HERMES", collect: collectHermes },
+    { title: "ZSH", collect: collectZsh },
+]
+
+// ---------------------------------------------------------------------
+// Vista COMANDOS: páginas tipo "man" con la CLI de cada herramienta (no
+// sus atajos de teclado). Mismo criterio que la vista de arriba: todo
+// sale de `<comando> --help` corrido en vivo, nunca de una lista a mano
+// que se pueda desincronizar - acá además con `2>&1` porque no todas las
+// CLIs mandan su --help a stdout (la de `work` lo manda entero a stderr).
+// Cada herramienta formatea su --help distinto (columnas alineadas con
+// continuación, columnas alineadas simples, viñetas en el caso de nix...)
+// así que hay un parser genérico por formato, reutilizado donde calza, en
+// vez de un parser por herramienta.
+const runHelp = (cmd: string) => execAsync(["bash", "-c", `${cmd} --help 2>&1`])
+
+// Formato "alineado con continuación": una entrada nueva arranca con
+// exactamente `indent` espacios seguidos de texto (los comandos de
+// `work --help`, la sección "Commands:" de `claude --help`, los
+// subcomandos dentro de "positional arguments" de `hermes --help`); si
+// la descripción no entra en esa misma línea, sigue en líneas indentadas
+// más todavía y se van concatenando.
+const parseAlignedCommandList = (text: string, indent: number): Array<[string, string]> => {
+    const prefix = " ".repeat(indent)
+    const rows: Array<[string, string]> = []
+    let current: [string, string] | null = null
+    for (const raw of text.split("\n")) {
+        if (raw.trim() === "") continue
+        const isEntry = raw.startsWith(prefix) && raw[indent] !== undefined && raw[indent] !== " "
+        if (isEntry) {
+            if (current) rows.push(current)
+            const rest = raw.slice(indent)
+            const sep = rest.match(/\s{2,}/)
+            current = sep
+                ? [rest.slice(0, sep.index).trim(), rest.slice(sep.index! + sep[0].length).trim()]
+                : [rest.trim(), ""]
+        } else if (current) {
+            current[1] = (current[1] ? current[1] + " " : "") + raw.trim()
+        }
+    }
+    if (current) rows.push(current)
+    return rows
+}
+
+// Formato "alineado simple": una fila por línea, sin continuación (los
+// comandos de `git --help`, la sección "Available Commands:" de
+// `podman --help`).
+const parseSimpleCommandList = (text: string, indent: number): Array<[string, string]> => {
+    const rows: Array<[string, string]> = []
+    const re = new RegExp(`^ {${indent}}(\\S+)\\s{2,}(.+)$`)
+    for (const raw of text.split("\n")) {
+        const m = raw.match(re)
+        if (m) rows.push([m[1], m[2].trim()])
+    }
+    return rows
+}
+
+// `work` es una función de zsh (home-manager/zsh.nix) que envuelve al
+// binario real `work-cli` para poder hacer `cd` en `enter`/`clone` - no
+// existe como ejecutable en el PATH, así que hay que pedirle --help al
+// binario real, no a la función.
+const collectWorkCommands = async (): Promise<Array<[string, string]>> =>
+    parseAlignedCommandList(await runHelp("work-cli"), 2)
+
+const collectClaudeCliCommands = async (): Promise<Array<[string, string]>> => {
+    const text = await runHelp("claude")
+    const idx = text.indexOf("\nCommands:\n")
+    return idx === -1 ? [] : parseAlignedCommandList(text.slice(idx), 2)
+}
+
+const collectGitCommands = async (): Promise<Array<[string, string]>> =>
+    parseSimpleCommandList(await runHelp("git"), 3)
+
+// nix usa viñetas ("· nix build - …") en vez de columnas alineadas, y las
+// usa también para sus opciones globales (sin el prefijo "nix ") - filtrar
+// por ese prefijo alcanza para quedarse solo con los subcomandos.
+const parseNixCommands = (text: string): Array<[string, string]> => {
+    const rows: Array<[string, string]> = []
+    let current: [string, string] | null = null
+    for (const raw of text.split("\n")) {
+        const trimmed = raw.trim()
+        if (trimmed === "") { if (current) { rows.push(current); current = null }; continue }
+        const m = trimmed.match(/^·\s+(nix[\w-]*(?:\s+[\w-]+)?)\s+-\s+(.+)$/)
+        if (m) {
+            if (current) rows.push(current)
+            current = [m[1], m[2]]
+        } else if (current) {
+            current[1] += ` ${trimmed}`
+        }
+    }
+    if (current) rows.push(current)
+    return rows
+}
+
+const collectNixCommands = async (): Promise<Array<[string, string]>> =>
+    parseNixCommands(await runHelp("nix"))
+
+const collectPodmanCommands = async (): Promise<Array<[string, string]>> => {
+    const text = await runHelp("podman")
+    const start = text.indexOf("Available Commands:")
+    if (start === -1) return []
+    const end = text.indexOf("\nOptions:", start)
+    return parseSimpleCommandList(end === -1 ? text.slice(start) : text.slice(start, end), 2)
+}
+
+// herdr no alinea su "Common commands:" en columnas de ancho fijo (una
+// entrada larga como "herdr channel set <stable|preview>" empuja la
+// descripción a un solo espacio de separación en vez de la columna
+// completa), así que en vez de asumir un ancho cada línea se corta donde
+// arranca la descripción en inglés (la primera mayúscula que sigue a
+// "herdr ...").
+const parseHerdrHelpCommands = (text: string): Array<[string, string]> => {
+    const rows: Array<[string, string]> = []
+    const re = /^\s+herdr(?:\s+([^\s].*?))?\s{1,}([A-ZÁÉÍÓÚ].*)$/
+    for (const raw of text.split("\n")) {
+        const m = raw.match(re)
+        if (m) rows.push([`herdr ${m[1] || ""}`.trim(), m[2].trim()])
+    }
+    return rows
+}
+
+const collectHerdrCliCommands = async (): Promise<Array<[string, string]>> =>
+    parseHerdrHelpCommands(await runHelp("herdr"))
+
+const collectHermesCliCommands = async (): Promise<Array<[string, string]>> => {
+    const text = await runHelp("hermes")
+    const start = text.indexOf("positional arguments:")
+    if (start === -1) return []
+    const end = text.indexOf("\noptions:", start)
+    return parseAlignedCommandList(end === -1 ? text.slice(start) : text.slice(start, end), 4)
+}
+
+const COMMAND_SOURCES: AppSource[] = [
+    { title: "WORK", collect: collectWorkCommands },
+    { title: "CLAUDE CODE", collect: collectClaudeCliCommands },
+    { title: "GIT", collect: collectGitCommands },
+    { title: "NIX", collect: collectNixCommands },
+    { title: "PODMAN / DOCKER", collect: collectPodmanCommands },
+    { title: "HERDR", collect: collectHerdrCliCommands },
+    { title: "HERMES", collect: collectHermesCliCommands },
 ]
 
 type Page = { title: string; rows: Array<[string, string]> }
+type Mode = "SHORTCUTS" | "COMANDOS"
+// Arriba/Abajo recorre este array (con solo 2 modos, alternar o "recorrer
+// con wraparound" da lo mismo, pero así queda listo si algún día se suma
+// un tercer modo).
+const MODES: Mode[] = ["SHORTCUTS", "COMANDOS"]
 
 let win: any = null
 let list: any = null
 let pageLabel: any = null
+let modeLabel: any = null
 let titleLabel: any = null
 let visible = false
-let pages: Page[] = []
-let pageIdx = 0
+let mode: Mode = "SHORTCUTS"
+const pagesByMode: Record<Mode, Page[]> = { SHORTCUTS: [], COMANDOS: [] }
+const pageIdxByMode: Record<Mode, number> = { SHORTCUTS: 0, COMANDOS: 0 }
 
 const keyValueRow = (combo: string, action: string) => {
     const keyLabel = Label({ label: combo, className: "shortcut-key" })
@@ -331,7 +515,7 @@ const keyValueRow = (combo: string, action: string) => {
     return row
 }
 
-const collectPages = async (): Promise<Page[]> => {
+const collectShortcutPages = async (): Promise<Page[]> => {
     const out: Page[] = []
     const push = (title: string, rows: Array<[string, string]>) => { if (rows.length) out.push({ title, rows }) }
 
@@ -377,9 +561,25 @@ const collectPages = async (): Promise<Page[]> => {
     return out
 }
 
+const collectCommandPages = async (): Promise<Page[]> => {
+    const out: Page[] = []
+    for (const app of COMMAND_SOURCES) {
+        try {
+            const rows = await app.collect()
+            if (rows.length) out.push({ title: app.title, rows })
+        } catch (e) {
+            print(`[shortcuts] COMANDOS ${app.title}:`, e)
+        }
+    }
+    return out
+}
+
 const renderPage = () => {
+    const pages = pagesByMode[mode]
+    if (modeLabel) modeLabel.set_label(`▲▼ MODO: ${mode}`)
     if (!list || pages.length === 0) return
     for (const child of list.get_children()) list.remove(child)
+    const pageIdx = pageIdxByMode[mode]
     const p = pages[pageIdx]
     for (const [combo, action] of p.rows) {
         list.add(keyValueRow(combo, action))
@@ -389,14 +589,24 @@ const renderPage = () => {
 }
 
 const goToPage = (delta: number) => {
+    const pages = pagesByMode[mode]
     if (pages.length === 0) return
-    pageIdx = (pageIdx + delta + pages.length) % pages.length
+    pageIdxByMode[mode] = (pageIdxByMode[mode] + delta + pages.length) % pages.length
+    renderPage()
+}
+
+const switchMode = (delta: number) => {
+    mode = MODES[(MODES.indexOf(mode) + delta + MODES.length) % MODES.length]
     renderPage()
 }
 
 const refresh = async () => {
-    pages = await collectPages()
-    pageIdx = 0
+    const [shortcutPages, commandPages] = await Promise.all([collectShortcutPages(), collectCommandPages()])
+    pagesByMode.SHORTCUTS = shortcutPages
+    pagesByMode.COMANDOS = commandPages
+    pageIdxByMode.SHORTCUTS = 0
+    pageIdxByMode.COMANDOS = 0
+    mode = "SHORTCUTS"
     renderPage()
     if (titleLabel) {
         const openKey = await keyForAgsRequest("shortcuts")
@@ -421,10 +631,20 @@ export const ShortcutsWindow = () => {
     titleLabel.set_halign(Gtk.Align.START)
 
     const legend = Label({
-        label: "Escape para cerrar · Izq/Der (←/→) para cambiar de página · $mod = SUPER, se combina con ALT · CTRL · SHIFT",
+        label: "Escape para cerrar · Arriba/Abajo (↑/↓) cambia de modo (SHORTCUTS ⇄ COMANDOS) · Izq/Der (←/→) cambia de página · $mod = SUPER, se combina con ALT · CTRL · SHIFT",
         className: "shortcuts-legend",
     })
     legend.set_halign(Gtk.Align.START)
+
+    const modeUpBtn = Button({ label: "▲ Arriba", className: "shortcut-navbtn" })
+    modeUpBtn.connect("clicked", () => switchMode(-1))
+    const modeDownBtn = Button({ label: "▼ Abajo", className: "shortcut-navbtn" })
+    modeDownBtn.connect("clicked", () => switchMode(1))
+    modeLabel = Label({ label: "", className: "shortcut-pagelabel" })
+
+    const modeNav = Box({ className: "shortcuts-nav", children: [modeUpBtn, modeLabel, modeDownBtn] })
+    modeNav.set_orientation(Gtk.Orientation.HORIZONTAL)
+    modeNav.set_halign(Gtk.Align.CENTER)
 
     const prevBtn = Button({ label: "◄ Izq", className: "shortcut-navbtn" })
     prevBtn.connect("clicked", () => goToPage(-1))
@@ -436,7 +656,7 @@ export const ShortcutsWindow = () => {
     nav.set_orientation(Gtk.Orientation.HORIZONTAL)
     nav.set_halign(Gtk.Align.CENTER)
 
-    const inner = Box({ className: "shortcuts-wrap", children: [titleLabel, legend, scroll, nav] })
+    const inner = Box({ className: "shortcuts-wrap", children: [titleLabel, legend, modeNav, scroll, nav] })
     inner.set_orientation(Gtk.Orientation.VERTICAL)
     inner.set_halign(Gtk.Align.CENTER)
     inner.set_valign(Gtk.Align.CENTER)
@@ -458,6 +678,8 @@ export const ShortcutsWindow = () => {
         try { const r = e.get_keyval?.(); k = r ? r[1] : e.keyval } catch {}
         if (k === Gdk.KEY_Left || k === Gdk.KEY_h) goToPage(-1)
         else if (k === Gdk.KEY_Right || k === Gdk.KEY_l) goToPage(1)
+        else if (k === Gdk.KEY_Up || k === Gdk.KEY_k) switchMode(-1)
+        else if (k === Gdk.KEY_Down || k === Gdk.KEY_j) switchMode(1)
         else if (k === Gdk.KEY_Escape) closePanel()
         return true
     })
