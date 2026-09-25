@@ -72,7 +72,7 @@ let wxTemp = "--°", wxDesc = "—", wxFeels = "--°", wxHum = "--", wxWind = "-
 let netName = "OFFLINE"
 const refreshNet = () => {
 
- execAsync(["sh", "-c", "iwgetid -r 2>/dev/null | sed 's/^/WiFi: /' | grep . || nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$1==\"ethernet\" && $2==\"connected\"{c++; print \"Ethernet \" c; exit}' | grep . || echo OFFLINE"])
+ execAsync(["sh", "-c", "iwgetid -r 2>/dev/null | sed 's/^/WiFi: /' | grep . || nmcli -t -f TYPE,STATE,CONNECTION device 2>/dev/null | awk -F: '$1==\"wifi\" && $2==\"connected\"{print \"WiFi: \" $3; exit} $1==\"ethernet\" && $2==\"connected\"{c++; print \"Ethernet \" c; exit}' | grep . || echo OFFLINE"])
      .then((o) => { const s = (o || "").trim(); netName = s || "OFFLINE"; areas.forEach(a => a?.queue_draw()) })
      .catch(() => { netName = "OFFLINE" })
 }
