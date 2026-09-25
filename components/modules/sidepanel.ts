@@ -69,6 +69,7 @@ let geoLat = 40.7128, geoLon = -74.006, mapTile = null, mapVer = 0, mapRequest =
 let mapCachePath = ""
 let wxLat = 40.7128, wxLon = -74.006, wxName = "NEW YORK", wxFull = "NEW YORK"
 let wxTemp = "--°", wxDesc = "—", wxFeels = "--°", wxHum = "--", wxWind = "--"
+let wxManual = false // true solo si el usuario eligió la ciudad a mano (clic derecho); si no, la pisa la geolocalización por IP
 let netName = "OFFLINE"
 const refreshNet = () => {
 
@@ -126,8 +127,23 @@ const readWxStore = (): Uint8Array | null => {
 }
 const saveWxLocation = () => {
  try {
-  GLib.file_set_contents(WX_STORE, new TextEncoder().encode(JSON.stringify({ name: wxName, full: wxFull, lat: wxLat, lon: wxLon, mapLat: geoLat, mapLon: geoLon, mapCache: mapCachePath }, null, 2) + "\n"))
+  GLib.file_set_contents(WX_STORE, new TextEncoder().encode(JSON.stringify({ name: wxName, full: wxFull, lat: wxLat, lon: wxLon, mapLat: geoLat, mapLon: geoLon, mapCache: mapCachePath, manual: wxManual }, null, 2) + "\n"))
  } catch (e) { print("[cyber] wx save:", e) }
+}
+// Geolocalización por IP (sin GPS, sin API key): resuelve la ubicación real al bootear.
+// Nunca pisa una ciudad elegida a mano (wxManual); si no hay red, se queda con lo último cacheado en city.json.
+const resolveAutoLocation = () => {
+ execAsync(["curl", "-sf", "--max-time", "6", "http://ip-api.com/json/?fields=status,lat,lon,city,regionName,country"])
+     .then((o) => {
+     if (wxManual) return
+     const r = JSON.parse(o)
+     if (r.status !== "success") return
+     wxLat = r.lat; wxLon = r.lon
+     wxName = String(r.city || wxName).toUpperCase()
+     wxFull = [r.city, r.regionName, r.country].filter(Boolean).join(", ").toUpperCase() || wxFull
+     mapCachePath = ""; setMapPoint(true); saveWxLocation(); refreshWeather()
+     })
+     .catch(() => {}) // sin red: seguimos con la última ubicación conocida
 }
 const loadWxLocation = () => {
  try {
@@ -136,6 +152,7 @@ const loadWxLocation = () => {
  const o = JSON.parse(new TextDecoder().decode(data))
  if (typeof o.lat === "number" && typeof o.lon === "number") {
  wxLat = o.lat; wxLon = o.lon; wxName = String(o.name || wxName); wxFull = String(o.full || o.name || wxName)
+ wxManual = o.manual === true
  if (typeof o.mapLat === "number" && typeof o.mapLon === "number") {
   geoLat = o.mapLat; geoLon = o.mapLon
   mapCachePath = typeof o.mapCache === "string" ? o.mapCache : mapCacheForPoint()
@@ -145,11 +162,13 @@ const loadWxLocation = () => {
   mapCachePath = ""
   setMapPoint(true)
  }
+ if (!wxManual) resolveAutoLocation()
  return
  }
  }
  } catch {}
  setMapPoint(true)
+ resolveAutoLocation()
 }
 
 
@@ -373,7 +392,7 @@ const wxRunSearch = async () => {
  wxScroll = 0; wxModal?.requestDraw()
 }
 const wxQueueSearch = () => { if (wxSearchTimer !== null) GLib.source_remove(wxSearchTimer); wxSearchTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 340, () => { wxSearchTimer = null; wxRunSearch().catch(print); return false }) }
-const wxPick = (r) => { wxLat = r.lat; wxLon = r.lon; wxName = String(r.name || "").toUpperCase(); wxFull = r.full.toUpperCase(); mapCachePath = ""; setMapPoint(true); saveWxLocation(); refreshWeather(); wxModal.close() }
+const wxPick = (r) => { wxManual = true; wxLat = r.lat; wxLon = r.lon; wxName = String(r.name || "").toUpperCase(); wxFull = r.full.toUpperCase(); mapCachePath = ""; setMapPoint(true); saveWxLocation(); refreshWeather(); wxModal.close() }
 
 const ensureWxModal = () => {
  if (wxModal) return
