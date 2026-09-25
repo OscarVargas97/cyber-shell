@@ -41,7 +41,7 @@ import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
 import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
-import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled, startUpgrade } from "./components/modules/aurbar.ts"
+import { UpdatesBadge, UpdatesPanel, toggleUpdatesPanel, closeUpdatesPanel, openForkCompare, applyToolUpdate } from "./components/modules/updates.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
 import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
@@ -318,23 +318,17 @@ App.start({
  } else if (request === "clock") {
  try { openTimeModal() } catch (e) { print(e) }
  reply("ok")
- } else if (request === "aur-dismiss") {
- try { dismissAurBar() } catch (e) { print(e) }
+ } else if (request === "updates-toggle") {
+ try { toggleUpdatesPanel() } catch (e) { print(e) }
  reply("ok")
- } else if (request === "aur-upgrade") {
- try { startUpgrade() } catch (e) { print(e) }
+ } else if (request === "updates-dismiss") {
+ try { closeUpdatesPanel() } catch (e) { print(e) }
  reply("ok")
- } else if (request === "update-dismiss") {
- // un solo bind para el "J" de DISMISS del popup, sea cual sea el modo
- // (AUR o tema) que esté mostrando - cada función ya es un no-op si su
- // modo no está activo, así que llamar a las dos siempre es seguro.
- try { dismissAurBar(); dismissThemeBar() } catch (e) { print(e) }
+ } else if (request.startsWith("updates-open-fork-compare ")) {
+ try { openForkCompare(request.slice(26).trim()) } catch (e) { print(e) }
  reply("ok")
- } else if (request === "cyber-update") {
- try { dismissThemeBar(); toggleModal("update") } catch (e) { print(e) }
- reply("ok")
- } else if (request.startsWith("pkg-installed ")) {
- try { const d = request.slice(14); const i = d.indexOf("|"); showInstalled(i < 0 ? d : d.slice(0, i), i < 0 ? "" : d.slice(i + 1)) } catch (e) { print(e) }
+ } else if (request.startsWith("updates-apply-tool ")) {
+ try { applyToolUpdate(request.slice(19).trim()) } catch (e) { print(e) }
  reply("ok")
 } else if (request.startsWith("kbconflicts")) {
   try { openKbConflictsModal(request) } catch (e) { print(e) }
@@ -356,11 +350,12 @@ App.start({
  { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
  { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
  { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
+ { const uw = surface(mon, "updatesbadge", Anchor.BOTTOM | Anchor.RIGHT, UpdatesBadge(mon)); (uw as any)._rectHit = true }
  { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
  }
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
- passthrough(AurBarWindow())
+ UpdatesPanel()
  ShortcutsWindow()
  NotifHudWindow()
  NowPlayingWindow()

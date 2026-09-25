@@ -355,3 +355,60 @@ tooltip label {
 .shortcut-navbtn:hover {
     background-color: rgba(94, 244, 248, 0.12);
 }
+
+.updates-wrap {
+    background-color: rgba(6, 9, 14, 0.94);
+    border: 1px solid $cyan-d;
+    border-radius: 6px;
+    box-shadow: 0 0 24px $cyan-d;
+    padding: 18px 22px;
+}
+.updates-title {
+    font-family: "Quantico", sans-serif; font-size: 15px; font-weight: 700;
+    color: $cyan; margin: 0 0 10px 0;
+}
+.updates-legend {
+    font-family: "Tektur", monospace; font-size: 11px;
+    color: rgba(228, 240, 255, 0.55);
+    padding: 0 0 10px 0;
+}
+.updates-empty {
+    font-family: "Tektur", monospace; font-size: 12px;
+    color: rgba(228, 240, 255, 0.6);
+    padding: 10px;
+}
+.updates-row {
+    padding: 8px 4px;
+    border-bottom: 1px solid rgba(94, 244, 248, 0.12);
+}
+.updates-row-texts {
+    padding: 0 12px 0 6px;
+}
+.updates-row-title {
+    font-family: "Quantico", sans-serif; font-size: 13px; font-weight: 700;
+    color: $cyan;
+}
+.updates-row-detail {
+    font-family: "Tektur", monospace; font-size: 11px;
+    color: rgba(228, 240, 255, 0.7);
+}
+.updates-btn {
+    font-family: "Tektur", monospace; font-size: 11px; font-weight: 700;
+    color: $magenta;
+    border: 1px solid $magenta;
+    border-radius: 4px;
+    padding: 4px 10px;
+}
+.updates-btn:hover {
+    background-color: rgba(255, 94, 208, 0.12);
+}
+.updates-badge {
+    background-color: rgba(6, 9, 14, 0.85);
+    border: 1px solid $magenta;
+    border-radius: 10px;
+    padding: 3px 9px;
+}
+.updates-badge-label {
+    font-family: "Tektur", monospace; font-size: 12px; font-weight: 700;
+    color: $magenta;
+}
