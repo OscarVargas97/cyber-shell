@@ -1,5 +1,5 @@
 
-import { Window, Box, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
+import { Window, Box, DrawingArea, EventBox, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { execAsync } from "ags/process"
 import { interval, timeout } from "ags/time"
@@ -860,15 +860,24 @@ export const toggleNotifHud = () => {
     hudVisible = !hudVisible
     if (hudVisible) {
         panelIntro = 0; animProg = 0; view = "apps"; selectedApp = null; scrollOffset = 0; menuState = null
-        try {
-            ;(win as any).gdkmonitor = activeMonitor()
-            const S = winScale(win)
-            area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
-            if (hudWrap) { hudWrap.set_margin_top(Math.round(156 * S)); hudWrap.set_margin_left(Math.round(18 * S)) }
-        } catch {}
-        win.visible = true; applyInput()
+        // Singleton (ver el comentario en ShortcutsWindow): se reubica en
+        // el monitor con foco cada vez que se abre en vez de quedar fijo
+        // en el primero de get_monitors(). kick()/nFire() se corren
+        // después de mostrar, no antes, para no disparar un redibujo con
+        // la ventana todavía oculta.
+        ;(async () => {
+            try {
+                ;(win as any).gdkmonitor = await focusedMonitor()
+                const S = winScale(win)
+                area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+                if (hudWrap) { hudWrap.set_margin_top(Math.round(156 * S)); hudWrap.set_margin_left(Math.round(18 * S)) }
+            } catch {}
+            win.visible = true; applyInput()
+            kick(); nFire()
+        })()
+    } else {
+        kick(); nFire()
     }
-    kick(); nFire()
 }
 
 export const NotifHudWindow = () => {

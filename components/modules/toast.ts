@@ -1,4 +1,4 @@
-import { Window, DrawingArea } from "./widget.ts"
+import { Window, DrawingArea, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval } from "ags/time"
 import Gdk from "gi://Gdk?version=3.0"
@@ -129,9 +129,15 @@ export const showToast = (text?: string, opts?: Partial<Cfg>) => {
  cfg = { ...DEF, ...(opts || {}) }
  if (text) cfg.text = text
  buildPlane()
- t0 = Date.now(); running = true; win.visible = true
+ t0 = Date.now(); running = true
  if (anim) anim.cancel()
- anim = interval(16, () => area.queue_draw())
+ const start = () => { win.visible = true; anim = interval(16, () => area.queue_draw()) }
+ // Singleton (ver ShortcutsWindow): foco real de Hyprland, no un monitor
+ // fijo. Sólo se resuelve en la transición oculto->visible - con toasts
+ // seguidos (ej. varios "ACTUALIZADO") no tiene sentido re-resolver el
+ // monitor en cada uno mientras ya está abierto.
+ if (win.visible) start()
+ else (async () => { try { win.gdkmonitor = await focusedMonitor() } catch {} start() })()
 }
 
 export const ToastWindow = () => {

@@ -1,4 +1,4 @@
-import { Window, Box, DrawingArea, activeMonitor } from "./widget.ts"
+import { Window, Box, DrawingArea, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout } from "ags/time"
 import GLib from "gi://GLib"
@@ -49,19 +49,28 @@ export const OsdWindow = () => {
  child: Box({ className: "osd-wrap", child: area }),
  })
 
- const show = () => {
- if (!win.visible) {
- try {
- (win as any).gdkmonitor = activeMonitor()
- const S = winScale(win)
- area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
- } catch {}
- }
+ // foco real de Hyprland (focusedMonitor), no el mouse (activeMonitor) -
+ // ver el comentario de openWheel en appsmenu.ts. Sólo se resuelve en la
+ // transición oculto->visible (como antes): con teclas de volumen/brillo
+ // repetidas y la ventana ya abierta, no tiene sentido re-resolver el
+ // monitor en cada toque, sólo reiniciar el timer.
+ const reveal = () => {
  area.queue_draw()
  win.visible = true
  brtCtl && brtCtl(true)
  if (hideTimer) { hideTimer.cancel?.() }
  hideTimer = timeout(1500, () => { win.visible = false; brtCtl && brtCtl(false) })
+ }
+ const show = () => {
+ if (win.visible) { reveal(); return }
+ ;(async () => {
+ try {
+ (win as any).gdkmonitor = await focusedMonitor()
+ const S = winScale(win)
+ area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+ } catch {}
+ reveal()
+ })()
  }
 
  try {

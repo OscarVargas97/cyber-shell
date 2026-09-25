@@ -1,4 +1,4 @@
-import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
+import { Window, DrawingArea, EventBox, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
 import { execAsync } from "ags/process"
 import { interval, timeout } from "ags/time"
@@ -295,12 +295,19 @@ const activate = (entry) => { if (!entry) return; wheelCfg.onActivate?.(entry.da
 const rowAtY = (y) => RENDER.find((r) => y >= r.y0 && y <= r.y1)
 
 
-export const openWheel = (cfg, entries) => {
+// Ventana compartida por TODOS los menús "wheel" (apps, theme settings,
+// red, bluetooth - ver los otros callers de openWheel): un solo fix acá
+// alcanza para todos. Antes reubicaba con activeMonitor() (sigue el
+// mouse) - con el mouse parado en el monitor externo mientras se trabaja
+// por teclado en el laptop, el menú abría en el monitor equivocado (el
+// bug de "aplicaciones" reportado). focusedMonitor() resuelve el monitor
+// con foco real de Hyprland en vez del cursor.
+export const openWheel = async (cfg, entries) => {
   if (!menuWin) return
   wheelCfg = cfg
   apps = entries; query = ""; filtered = apps.slice(); searchFlash = 0; scroll = 0; scrollTarget = 0
   active = true; intro = 1; introTarget = 1; lastFocusIdx = -1
-  try { menuWin.gdkmonitor = activeMonitor() } catch {}
+  try { menuWin.gdkmonitor = await focusedMonitor() } catch {}
   try { menuWin.keymode = cfg.keymode ?? Keymode.ON_DEMAND } catch {}
   menuWin.visible = true; try { menuWin.present?.() } catch {}
   menuArea?.queue_draw()

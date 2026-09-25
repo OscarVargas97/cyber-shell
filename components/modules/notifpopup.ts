@@ -1,4 +1,4 @@
-import { Window, DrawingArea, activeMonitor } from "./widget.ts"
+import { Window, DrawingArea, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { execAsync } from "ags/process"
 import { interval, timeout } from "ags/time"
@@ -300,14 +300,20 @@ const add = (n: any) => {
     msgs.unshift(m)
     while (msgs.length > MAXFR) msgs.pop()
     play(); kick()
-    try {
-        if (!win.visible) {
-            ;(win as any).gdkmonitor = activeMonitor()
-            const S = winScale(win)
-            area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * S), Math.round((MARGIN_T + plane.height + 20) * S))
-        }
-        win.visible = true
-    } catch {}
+    // Sólo reubica si estaba oculta (primer mensaje de una tanda) - con la
+    // ventana ya visible no tiene sentido saltar de monitor a mitad de una
+    // notificación. foco real de Hyprland (focusedMonitor), no el mouse
+    // (activeMonitor) - ver el comentario de openWheel en appsmenu.ts.
+    ;(async () => {
+        try {
+            if (!win.visible) {
+                ;(win as any).gdkmonitor = await focusedMonitor()
+                const S = winScale(win)
+                area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * S), Math.round((MARGIN_T + plane.height + 20) * S))
+            }
+            win.visible = true
+        } catch {}
+    })()
     timeout(LIFETIME, () => { if (msgs.includes(m) && !m.read) removeMsg(m) })
 }
 

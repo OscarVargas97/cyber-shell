@@ -1,4 +1,4 @@
-import { Window, Box, DrawingArea, App } from "./widget.ts"
+import { Window, Box, DrawingArea, App, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout } from "ags/time"
 import AstalMpris from "gi://AstalMpris"
@@ -13,9 +13,22 @@ const plane = makePlane({ w: IW, h: IH, yaw: 8, pitch: 2, roll: -1, focal: 3600,
 const BW = plane.width, BH = plane.height
 const TOTAL_MS = 7500, SCAN_MS = 2000, INTRO_MS = 620, OUTRO_MS = 500, SETTLE_MS = 140
 
-let areas: any[] = [], wins: any[] = []
+let areas: any[] = [], wins: any[] = [], winMons: any[] = []
 const redrawAll = () => areas.forEach(a => { try { a.queue_draw() } catch {} })
-const setShown = (v) => wins.forEach(w => { try { w.visible = v } catch {} })
+// Antes mostraba/ocultaba TODAS las ventanas a la vez (una por monitor,
+// armadas en NowPlayingWindow) - con dos monitores el banner aparecía
+// duplicado en los dos en vez de solo en el que tiene el foco de
+// Hyprland. Se resuelve acá en vez de en cada Window individual porque
+// show()/watch() son los únicos puntos donde se decide "ahora toca
+// mostrarse" - las ventanas en sí no saben nada de foco.
+const setShown = (v) => {
+    if (!v) { wins.forEach(w => { try { w.visible = false } catch {} }); return }
+    ;(async () => {
+        const target = await focusedMonitor()
+        const idx = target ? winMons.indexOf(target) : -1
+        wins.forEach((w, i) => { try { w.visible = i === (idx === -1 ? 0 : idx) } catch {} })
+    })()
+}
 
 let curTitle = "", curArtist = "", curSrc = "", curId = ""
 let el = 0, animTimer: any = null, visible = false
@@ -171,7 +184,7 @@ export const NowPlayingWindow = () => {
          anchor: Anchor.TOP | Anchor.RIGHT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
          child: wrap,
      })
-     wins.push(win)
+     wins.push(win); winMons.push(mon)
  })
  initMpris()
  return areas[0]

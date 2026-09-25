@@ -12,7 +12,7 @@
 //     workos-private (nixpkgs, home-manager, disko, ags, cyberShell, y
 //     workos visto desde workos-private) vía `nix flake metadata`,
 //     comparados contra el último commit real de cada uno.
-import { Window, Box, Button, Label, Scrollable, EventBox, Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
+import { Window, Box, Button, Label, Scrollable, EventBox, Anchor, Layer, Exclusivity, Keymode, focusedMonitor } from "./widget.ts"
 import Gtk from "gi://Gtk?version=3.0"
 import Gdk from "gi://Gdk?version=3.0"
 import { execAsync } from "ags/process"
@@ -227,7 +227,7 @@ const renderList = () => {
 const updateBadge = () => {
     const n = current.forks.length + current.tools.length
     for (const b of badges) {
-        try { b.label.set_label(`⟳ ${n}`); b.evt.visible = n > 0 } catch { }
+        try { b.label.set_label(`⟳ ${n}`); b.evt.visible = true } catch { }
     }
 }
 
@@ -277,8 +277,14 @@ export const applyToolUpdate = async (id: string) => {
 export const toggleUpdatesPanel = () => {
     if (!panelWin) return
     if (panelWin.visible) { panelWin.visible = false; return }
-    refreshUpdates()
-    panelWin.visible = true
+    // Singleton igual que ShortcutsWindow (ver el comentario ahí): sin
+    // `gdkmonitor` quedaba fijo en el primer monitor de get_monitors(),
+    // no en el que tiene el foco - se reubica en cada apertura.
+    ;(async () => {
+        try { panelWin.gdkmonitor = await focusedMonitor() } catch {}
+        refreshUpdates()
+        panelWin.visible = true
+    })()
 }
 
 export const closeUpdatesPanel = () => { if (panelWin) panelWin.visible = false }

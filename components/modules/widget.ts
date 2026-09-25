@@ -1,6 +1,7 @@
 import { Astal, Gtk } from "ags/gtk3"
 import app from "ags/gtk3/app"
 import Gdk from "gi://Gdk?version=3.0"
+import { execAsync } from "ags/process"
 export { Astal }
 export const App = app
 
@@ -16,6 +17,28 @@ export const monitorAtPoint = (x, y) => {
  try {
  const d = Gdk.Display.get_default()
  return d.get_monitor_at_point(x, y)
+ } catch { return null }
+}
+
+// Monitor con foco real de Hyprland - distinto de activeMonitor(), que
+// sigue al mouse. Para un popup que se abre con un bind (Super+Shift+S,
+// apps-menu, notif-hud...) lo que importa es dónde está trabajando la
+// persona (foco de teclado), no dónde quedó parado el cursor: con el
+// mouse parado en el monitor externo mientras se trabaja por teclado en
+// el laptop, activeMonitor() abría el popup en el monitor equivocado -
+// bug real confirmado en vivo con dos monitores. Se resuelve el monitor
+// "focused: true" de `hyprctl monitors -j` a coordenadas y de ahí a un
+// Gdk.Monitor con el mismo monitorAtPoint() de arriba (Gdk no expone los
+// monitores por nombre de conector, así que hay que pasar por un punto).
+// Sin caché a propósito, mismo criterio que keyForAgsRequest en
+// keymap.ts: la llamada es barata y sólo se hace al abrir un popup, nunca
+// en un loop.
+export const focusedMonitor = async () => {
+ try {
+ const mons = JSON.parse(await execAsync(["hyprctl", "monitors", "-j"])) as any[]
+ const m = mons.find((x) => x && x.focused)
+ if (!m) return null
+ return monitorAtPoint(m.x + Math.floor(m.width / 2), m.y + Math.floor(m.height / 2))
  } catch { return null }
 }
 export const Anchor = Astal.WindowAnchor

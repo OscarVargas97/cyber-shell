@@ -1,6 +1,6 @@
 
 
-import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
+import { Window, DrawingArea, EventBox, activeMonitor, focusedMonitor } from "./widget.ts"
 import { Layer, Exclusivity, Keymode } from "./widget.ts"
 
 const SS_DEFAULT = 1
@@ -247,7 +247,12 @@ export const createModal = (spec) => {
             gw.input_shape_combine_region(reg, 0, 0)
         } catch (e) { print("[cyber] modal input shape:", e) }
     }
-    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = activeMonitor() } catch {}; try { const S = winScale(win); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S)); const MW = monW(win); if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25)); else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03)) } catch {}; spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
+    // gdkmonitor via focusedMonitor() (foco real de Hyprland), no
+    // activeMonitor() (sigue el mouse) - ver el comentario de openWheel en
+    // appsmenu.ts, mismo bug. async solo por eso: nada más acá depende de
+    // I/O, así que el resto de la función sigue igual, solo esperando la
+    // resolución del monitor antes de calcular márgenes que dependen de él.
+    ctrl.open = async () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = await focusedMonitor() } catch {}; try { const S = winScale(win); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S)); const MW = monW(win); if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25)); else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03)) } catch {}; spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
     ctrl.close = () => { if (!visible && introTarget === 0) return; visible = false; introTarget = 0; if (!animOn("animModal")) intro = 0; shapeInput(); spec.onClose?.(); fireChange(); startTimers() }
     ctrl.toggle = () => visible ? ctrl.close() : ctrl.open()
     ctrl.isOpen = () => visible

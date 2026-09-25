@@ -1,4 +1,4 @@
-import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
+import { Window, DrawingArea, EventBox, focusedMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
 import { execAsync } from "ags/process"
 import { interval, timeout } from "ags/time"
@@ -347,11 +347,18 @@ const stopTimers = () => { if (pollT) { pollT.cancel(); pollT = null } if (animT
 export const togglePlayer = () => {
  if (!visible) {
      visible = true; introTarget = 1
-     try { pWin.gdkmonitor = activeMonitor() } catch {}
-     pWin.visible = true; try { pWin.present?.() } catch {}
-     poll(); startTimers(); pFire()
- } else closePlayer()
- pArea && pArea.queue_draw()
+     // Singleton (ver ShortcutsWindow): foco real de Hyprland
+     // (focusedMonitor), no el mouse (activeMonitor).
+     ;(async () => {
+         try { pWin.gdkmonitor = await focusedMonitor() } catch {}
+         pWin.visible = true; try { pWin.present?.() } catch {}
+         poll(); startTimers(); pFire()
+         pArea && pArea.queue_draw()
+     })()
+ } else {
+     closePlayer()
+     pArea && pArea.queue_draw()
+ }
 }
 const pCbs: any[] = []
 export const onPlayerChange = (cb) => { pCbs.push(cb) }

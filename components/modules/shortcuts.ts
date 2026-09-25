@@ -19,7 +19,7 @@
 //   - COMANDOS: la CLI de cada herramienta del sistema, tipo página man -
 //     un listado de subcomandos con su descripción, sacado en vivo de
 //     `<comando> --help` (ver "Vista COMANDOS" más abajo).
-import { Window, Box, Button, Label, Scrollable, Layer, Anchor, Exclusivity, Keymode } from "./widget.ts"
+import { Window, Box, Button, Label, Scrollable, Layer, Anchor, Exclusivity, Keymode, focusedMonitor } from "./widget.ts"
 import { execAsync } from "ags/process"
 import GLib from "gi://GLib"
 import Gtk from "gi://Gtk?version=3.0"
@@ -689,5 +689,20 @@ export const ShortcutsWindow = () => {
 export const toggleShortcuts = () => {
     if (!win) return
     visible = !visible
-    if (visible) { refresh(); win.show() } else { closePanel() }
+    if (!visible) { closePanel(); return }
+    // Singleton (una sola ventana, no una por monitor como el dock/sidepanel):
+    // antes se creaba sin `gdkmonitor` y quedaba fija en el primer monitor
+    // que devuelve get_monitors(), no en el que tenía el foco - bug real
+    // confirmado en vivo con dos monitores. Se reubica en el monitor con
+    // foco cada vez que se abre en vez de pasar a multi-instancia: es un
+    // popup pesado (arma ~14 páginas en vivo) y solo hay uno visible por
+    // definición (no tiene sentido una copia por monitor, a diferencia del
+    // dock). Solo se espera focusedMonitor() (rápido, un solo hyprctl) antes
+    // de mostrar - refresh() sigue disparándose en paralelo sin bloquear el
+    // show(), así la ventana aparece al instante y las páginas se llenan
+    // solas apenas están listas.
+    ;(async () => {
+        try { win.gdkmonitor = await focusedMonitor() } catch {}
+        refresh(); win.show()
+    })()
 }
