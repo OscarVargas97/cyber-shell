@@ -41,7 +41,7 @@ import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
 import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
-import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled } from "./components/modules/aurbar.ts"
+import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled, startUpgrade } from "./components/modules/aurbar.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
 import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
@@ -320,6 +320,15 @@ App.start({
  reply("ok")
  } else if (request === "aur-dismiss") {
  try { dismissAurBar() } catch (e) { print(e) }
+ reply("ok")
+ } else if (request === "aur-upgrade") {
+ try { startUpgrade() } catch (e) { print(e) }
+ reply("ok")
+ } else if (request === "update-dismiss") {
+ // un solo bind para el "J" de DISMISS del popup, sea cual sea el modo
+ // (AUR o tema) que esté mostrando - cada función ya es un no-op si su
+ // modo no está activo, así que llamar a las dos siempre es seguro.
+ try { dismissAurBar(); dismissThemeBar() } catch (e) { print(e) }
  reply("ok")
  } else if (request === "cyber-update") {
  try { dismissThemeBar(); toggleModal("update") } catch (e) { print(e) }
