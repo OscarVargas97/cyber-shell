@@ -227,7 +227,7 @@ const renderList = () => {
 const updateBadge = () => {
     const n = current.forks.length + current.tools.length
     for (const b of badges) {
-        try { b.label.set_label(`⟳ ${n}`); b.evt.visible = true } catch { }
+        try { b.label.set_label(`⟳ ${n}`); b.evt.visible = n > 0 } catch { }
     }
 }
 

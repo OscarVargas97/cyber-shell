@@ -313,7 +313,7 @@ const drawOverlay = (ctx, now) => {
  }
 
 
- const ny = fy + 121, dx = 72
+ const ny = fy + 80, dx = 72
  const off = !netName || netName === "OFFLINE"
  const stxt = off ? "OFFLINE!" : netName
  tiltText(ctx, connPlane, MX0 - 16 + dx, ny, "NETWORK STATUS", TITLE, 14, NETCOL, 1, { bold: true, glow: 0.22, bloom: 0.45, shadow: 1 })
@@ -321,7 +321,7 @@ const drawOverlay = (ctx, now) => {
  tiltText(ctx, connPlane, MX0 + 26 + dx, ny + 22, stxt, TITLE, 14, NETCOL, 0.95, { bold: true, glow: off ? 0.22 : 0.1, bloom: 0.45, shadow: 1 })
 }
 const drawNetSpeed = (ctx) => {
- const fy = MY1 + 65, ny = fy + 91, ux = MX0 + 276
+ const fy = MY1 + 79, ny = fy + 91, ux = MX0 + 276
  tiltText(ctx, connPlane, ux - 70, ny - 1, "", ICONF, 9, NETUP, 0.95, { bold: true, align: "r" })
  tiltText(ctx, connPlane, ux - 25, ny - 1, `${netUp} Mbps`, MONO, 8.5, NETUP, 0.92, { bold: true, align: "r", glow: 0.3 })
  tiltText(ctx, connPlane, ux - 50, ny + 22, "", ICONF, 9, NETDN, 0.95, { bold: true, align: "r" })

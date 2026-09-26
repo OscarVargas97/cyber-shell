@@ -350,8 +350,12 @@ App.start({
  { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
  { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
  { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
- { const uw = surface(mon, "updatesbadge", Anchor.BOTTOM | Anchor.RIGHT, UpdatesBadge(mon)); (uw as any)._rectHit = true }
  { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
+ // updatesbadge se crea despues del launcher: ambos anclan en la misma
+ // esquina (BOTTOM|RIGHT) y el rect del launcher (~190x190) contiene por
+ // completo el del badge (~40x25); sin este orden, el launcher -mapeado
+ // despues- queda arriba en el stacking y se come los clicks del badge.
+ { const uw = surface(mon, "updatesbadge", Anchor.BOTTOM | Anchor.RIGHT, UpdatesBadge(mon)); (uw as any)._rectHit = true }
  }
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
