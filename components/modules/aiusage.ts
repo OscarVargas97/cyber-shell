@@ -3,6 +3,15 @@
 // cmodal.ts solo por tamaño - createModal vive ahí y no puede importarse
 // acá sin un ciclo.
 export type UsageWindow = { pct: number | null; resets_at: string | null }
+export type LocalSpendDay = { date: string; usd: number }
+export type LocalSpend = {
+    available: boolean
+    reason?: string
+    today_usd?: number
+    yesterday_usd?: number
+    last_30d_usd?: number
+    daily?: LocalSpendDay[]
+}
 export type AiUsage = {
     ok: boolean
     error?: string
@@ -11,6 +20,7 @@ export type AiUsage = {
     weekly?: UsageWindow
     extra_usage?: { enabled: boolean; used_usd: number | null; limit_usd: number | null }
     resets_available?: number
+    local_spend?: LocalSpend
 }
 
 export const AI_USAGE_ERR_TEXT: Record<string, string> = {

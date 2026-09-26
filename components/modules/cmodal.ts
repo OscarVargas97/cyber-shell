@@ -20,7 +20,7 @@ import { startModalStats, stopModalStats } from "./sys.ts"
 import { ThemesCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
-import { AI_USAGE_ERR_TEXT, fmtAiUsageEta, type AiUsage, type UsageWindow } from "./aiusage.ts"
+import { AI_USAGE_ERR_TEXT, fmtAiUsageEta, type AiUsage, type UsageWindow, type LocalSpendDay } from "./aiusage.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -1081,7 +1081,7 @@ const AiUsageCtrl = () => {
     }
 
     ctrl = createModal({
-        name: "aiusage", tabTitle: "CLAUDE CODE · USAGE", W: 360, H: 280,
+        name: "aiusage", tabTitle: "CLAUDE CODE · USAGE", W: 360, H: 460,
         onOpen: refresh, poll: refresh, pollMs: 90000,
         draw: (ctx, g) => {
             const x = g.X + 20, w = g.w - 40
@@ -1122,6 +1122,28 @@ const AiUsageCtrl = () => {
                 const limitTxt = extra.limit_usd ? `/ $${extra.limit_usd.toFixed(2)}` : ""
                 txt(ctx, x, cy + 32, `$${used} ${limitTxt}`, MONO, 10, g.col, 0.8)
                 cy += 46
+            }
+
+            const local = usage.local_spend
+            if (local?.available) {
+                const daily: LocalSpendDay[] = local.daily ?? []
+                txt(ctx, x, cy + 12, "GASTO LOCAL (ESTIMADO)", TITLE, 13, g.accent, 0.95)
+                cy += 22
+                const todayTxt = `HOY $${(local.today_usd ?? 0).toFixed(2)}`
+                const yestTxt = `AYER $${(local.yesterday_usd ?? 0).toFixed(2)}`
+                ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(11)
+                txt(ctx, x, cy + 10, todayTxt, MONO, 11, g.col, 0.92)
+                txt(ctx, x + w - ctx.textExtents(yestTxt).width, cy + 10, yestTxt, MONO, 11, g.col, 0.72)
+                cy += 20
+                const maxUsd = Math.max(1, ...daily.map((d) => d.usd))
+                drawGraph(ctx, x, cy, w, 44, daily.map((d) => d.usd), maxUsd, g.col)
+                cy += 50
+                txt(ctx, x, cy + 8, `30D: $${(local.last_30d_usd ?? 0).toFixed(2)}`, MONO, 9, g.col, 0.6)
+                txt(ctx, x, cy + 22, "// ESTIMADO A TARIFA DE API · NO ES TU CARGO REAL", MONO, 7.5, g.col, 0.4)
+                cy += 36
+            } else if (local && !local.available) {
+                txt(ctx, x, cy + 12, "GASTO LOCAL: SIN DATOS", MONO, 9, g.col, 0.5)
+                cy += 26
             }
 
             if (usage.resets_available) {
