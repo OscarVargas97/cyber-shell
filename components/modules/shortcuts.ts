@@ -476,6 +476,28 @@ const COMMAND_SOURCES: AppSource[] = [
     { title: "HERMES", collect: collectHermesCliCommands },
 ]
 
+// CLOUD-OPS (multiplex-dev, multiplex-prod, ...): un binario por entorno de
+// workos.cloudOps.environments (work-os/scripts/cloud-ops.sh en workos).
+// Nombre y cantidad dependen de la config privada de quien use este repo -
+// este archivo es genérico (no sabe qué empresa ni qué entornos declaró
+// nadie), así que se descubren en vivo en vez de escribirlos a mano. Todo
+// wrapper generado por ese módulo trae la marca `CLOUDOPS_NAME=` en su
+// script (ver modules/workos.nix de workos): alcanza para distinguirlo del
+// resto de $PATH sin conocer los nombres de antemano.
+const collectCloudOpsSources = async (): Promise<AppSource[]> => {
+    const dir = `/etc/profiles/per-user/${GLib.get_user_name()}/bin`
+    try {
+        const out = await execAsync(["bash", "-c", `grep -l 'CLOUDOPS_NAME=' "${dir}"/* 2>/dev/null || true`])
+        const names = out.split("\n").map((l) => l.trim()).filter(Boolean).map((p) => p.split("/").pop()!)
+        return names.map((name) => ({
+            title: name.toUpperCase(),
+            collect: async () => parseAlignedCommandList(await runHelp(name), 2),
+        }))
+    } catch {
+        return []
+    }
+}
+
 type Page = { title: string; rows: Array<[string, string]> }
 type Mode = "SHORTCUTS" | "COMANDOS"
 // Arriba/Abajo recorre este array (con solo 2 modos, alternar o "recorrer
@@ -563,7 +585,7 @@ const collectShortcutPages = async (): Promise<Page[]> => {
 
 const collectCommandPages = async (): Promise<Page[]> => {
     const out: Page[] = []
-    for (const app of COMMAND_SOURCES) {
+    for (const app of [...COMMAND_SOURCES, ...(await collectCloudOpsSources())]) {
         try {
             const rows = await app.collect()
             if (rows.length) out.push({ title: app.title, rows })
