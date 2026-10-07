@@ -26,6 +26,7 @@ import Gtk from "gi://Gtk?version=3.0"
 import Gdk from "gi://Gdk?version=3.0"
 import Pango from "gi://Pango?version=1.0"
 import { modmaskToStr, fullKeyForAgsRequest } from "./keymap.ts"
+import { registerExclusivePanel, closeOtherPanels } from "./exclusive.ts"
 
 const CATEGORY_ORDER = [
     "Aplicaciones", "Ventanas", "Ventanas (mouse)", "Workspaces", "Sistema", "Capturas", "HUD",
@@ -705,6 +706,8 @@ export const ShortcutsWindow = () => {
         else if (k === Gdk.KEY_Escape) closePanel()
         return true
     })
+    registerExclusivePanel("shortcuts", { isOpen: () => visible, close: closePanel })
+
     return win
 }
 
@@ -725,6 +728,7 @@ export const toggleShortcuts = () => {
     // solas apenas están listas.
     ;(async () => {
         try { win.gdkmonitor = await focusedMonitor() } catch {}
+        closeOtherPanels("shortcuts")
         refresh(); win.show()
     })()
 }

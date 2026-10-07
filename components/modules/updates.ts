@@ -20,6 +20,7 @@ import { interval, timeout } from "ags/time"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import { showToast } from "./toast.ts"
+import { registerExclusivePanel, closeOtherPanels } from "./exclusive.ts"
 
 const HOME = GLib.get_home_dir()
 const CFG_DIR = `${GLib.get_user_config_dir()}/work-os`
@@ -282,6 +283,7 @@ export const toggleUpdatesPanel = () => {
     // no en el que tiene el foco - se reubica en cada apertura.
     ;(async () => {
         try { panelWin.gdkmonitor = await focusedMonitor() } catch {}
+        closeOtherPanels("updates")
         refreshUpdates()
         panelWin.visible = true
     })()
@@ -339,6 +341,8 @@ export const UpdatesPanel = () => {
         if (k === Gdk.KEY_Escape) closeUpdatesPanel()
         return true
     })
+
+    registerExclusivePanel("updates", { isOpen: () => !!panelWin?.visible, close: closeUpdatesPanel })
 
     renderList()
     const recheckAndToast = () => refreshUpdates().then(() => {

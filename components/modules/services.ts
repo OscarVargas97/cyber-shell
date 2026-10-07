@@ -17,6 +17,7 @@ import { execAsync } from "ags/process"
 import { interval, timeout } from "ags/time"
 import GLib from "gi://GLib"
 import { showToast } from "./toast.ts"
+import { registerExclusivePanel, closeOtherPanels } from "./exclusive.ts"
 
 const RECHECK_MS = 30000 // 30s - es un systemctl local, barato
 
@@ -163,6 +164,7 @@ export const toggleServicesPanel = () => {
     // tiene el foco.
     ;(async () => {
         try { panelWin.gdkmonitor = await focusedMonitor() } catch { }
+        closeOtherPanels("services")
         refreshServices()
         panelWin.visible = true
     })()
@@ -218,6 +220,8 @@ export const ServicesPanel = () => {
         if (k === Gdk.KEY_Escape) closeServicesPanel()
         return true
     })
+
+    registerExclusivePanel("services", { isOpen: () => !!panelWin?.visible, close: closeServicesPanel })
 
     renderList()
     // Avisa una sola vez por servicio caído: el re-chequeo corre cada 30s y
