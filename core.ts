@@ -42,6 +42,7 @@ import { setTextHalo } from "./components/modules/proj.ts"
 import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
 import { UpdatesBadge, UpdatesPanel, toggleUpdatesPanel, closeUpdatesPanel, openForkCompare, applyToolUpdate } from "./components/modules/updates.ts"
+import { ServicesBadge, ServicesPanel, toggleServicesPanel, closeServicesPanel } from "./components/modules/services.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
 import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
@@ -66,6 +67,9 @@ const WRAP_MARGINS: Record<string, [number, number, number, number]> = {
  monitors: [20, 0, 0, 20],
  sidepanel: [26, 28, 0, 0],
  toggles: [0, 0, 0, -5],
+ // Misma esquina que updatesbadge: se lo levanta la altura de ese badge
+ // mas un respiro, si no quedan superpuestos cuando aparecen los dos.
+ servicesbadge: [0, 0, 34, 0],
 }
 const surface = (mon, name, anchor, child, extra = {}) => {
  const S = scaleOf(mon)
@@ -318,6 +322,12 @@ App.start({
  } else if (request === "clock") {
  try { openTimeModal() } catch (e) { print(e) }
  reply("ok")
+ } else if (request === "services-toggle") {
+ try { toggleServicesPanel() } catch (e) { print(e) }
+ reply("ok")
+ } else if (request === "services-dismiss") {
+ try { closeServicesPanel() } catch (e) { print(e) }
+ reply("ok")
  } else if (request === "updates-toggle") {
  try { toggleUpdatesPanel() } catch (e) { print(e) }
  reply("ok")
@@ -356,10 +366,12 @@ App.start({
  // completo el del badge (~40x25); sin este orden, el launcher -mapeado
  // despues- queda arriba en el stacking y se come los clicks del badge.
  { const uw = surface(mon, "updatesbadge", Anchor.BOTTOM | Anchor.RIGHT, UpdatesBadge(mon)); (uw as any)._rectHit = true }
+ { const sw2 = surface(mon, "servicesbadge", Anchor.BOTTOM | Anchor.RIGHT, ServicesBadge(mon)); (sw2 as any)._rectHit = true }
  }
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
  UpdatesPanel()
+ ServicesPanel()
  ShortcutsWindow()
  NotifHudWindow()
  NowPlayingWindow()

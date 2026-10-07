@@ -412,3 +412,106 @@ tooltip label {
     font-family: "Tektur", monospace; font-size: 12px; font-weight: 700;
     color: $magenta;
 }
+
+/* Panel de servicios de fondo (services.ts). Mismo lenguaje que
+   .updates-*, con una columna de chips de estado al frente: el color del
+   chip es lo que se lee de un vistazo, antes que el nombre. */
+.services-wrap {
+    background-color: rgba(6, 9, 14, 0.94);
+    border: 1px solid $cyan-d;
+    border-radius: 6px;
+    box-shadow: 0 0 24px $cyan-d;
+    padding: 18px 22px;
+}
+.services-title {
+    font-family: "Quantico", sans-serif; font-size: 15px; font-weight: 700;
+    color: $cyan; margin: 0 0 10px 0;
+}
+.services-legend {
+    font-family: "Tektur", monospace; font-size: 11px;
+    color: rgba(228, 240, 255, 0.55);
+    padding: 0 0 10px 0;
+}
+.services-empty {
+    font-family: "Tektur", monospace; font-size: 12px;
+    color: rgba(228, 240, 255, 0.6);
+    padding: 10px;
+}
+.services-row {
+    padding: 9px 4px;
+    border-bottom: 1px solid rgba(94, 244, 248, 0.12);
+}
+.services-row-texts {
+    padding: 0 12px;
+}
+.services-row-title {
+    font-family: "Quantico", sans-serif; font-size: 13px; font-weight: 700;
+    color: $cyan;
+}
+.services-row-detail {
+    font-family: "Tektur", monospace; font-size: 11px;
+    color: rgba(228, 240, 255, 0.7);
+}
+/* Ancho fijo para que los nombres de todas las filas arranquen alineados
+   aunque el estado sea "OK" o "ARRANCANDO". */
+.services-chip {
+    font-family: "Tektur", monospace; font-size: 10px; font-weight: 700;
+    border-radius: 3px;
+    padding: 3px 7px;
+    min-width: 76px;
+}
+.services-chip.ok {
+    color: rgba(94, 248, 160, 1);
+    border: 1px solid rgba(94, 248, 160, 0.5);
+    background-color: rgba(94, 248, 160, 0.10);
+}
+.services-chip.bad {
+    color: $red;
+    border: 1px solid $line;
+    background-color: $red-f;
+}
+.services-chip.warn {
+    color: rgba(255, 206, 84, 1);
+    border: 1px solid rgba(255, 206, 84, 0.5);
+    background-color: rgba(255, 206, 84, 0.10);
+}
+.services-chip.off {
+    color: rgba(228, 240, 255, 0.5);
+    border: 1px solid rgba(228, 240, 255, 0.22);
+    background-color: rgba(228, 240, 255, 0.05);
+}
+.services-btn {
+    font-family: "Tektur", monospace; font-size: 10px; font-weight: 700;
+    color: $cyan;
+    border: 1px solid $cyan-d;
+    border-radius: 4px;
+    padding: 4px 9px;
+    margin: 0 0 0 6px;
+}
+.services-btn:hover {
+    background-color: rgba(94, 244, 248, 0.12);
+}
+.services-btn.good {
+    color: rgba(94, 248, 160, 1);
+    border: 1px solid rgba(94, 248, 160, 0.5);
+}
+.services-btn.good:hover {
+    background-color: rgba(94, 248, 160, 0.12);
+}
+.services-btn.danger {
+    color: $magenta;
+    border: 1px solid $magenta;
+}
+.services-btn.danger:hover {
+    background-color: rgba(228, 50, 200, 0.12);
+}
+.services-badge {
+    background-color: rgba(6, 9, 14, 0.85);
+    border: 1px solid $red;
+    border-radius: 10px;
+    padding: 3px 9px;
+}
+.services-badge-label {
+    font-family: "Tektur", monospace; font-size: 12px; font-weight: 700;
+    color: $red;
+}
