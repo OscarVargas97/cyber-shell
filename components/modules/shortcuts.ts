@@ -25,7 +25,7 @@ import GLib from "gi://GLib"
 import Gtk from "gi://Gtk?version=3.0"
 import Gdk from "gi://Gdk?version=3.0"
 import Pango from "gi://Pango?version=1.0"
-import { modmaskToStr, keyForAgsRequest } from "./keymap.ts"
+import { modmaskToStr, fullKeyForAgsRequest } from "./keymap.ts"
 
 const CATEGORY_ORDER = [
     "Aplicaciones", "Ventanas", "Ventanas (mouse)", "Workspaces", "Sistema", "Capturas", "HUD",
@@ -631,8 +631,8 @@ const refresh = async () => {
     mode = "SHORTCUTS"
     renderPage()
     if (titleLabel) {
-        const openKey = await keyForAgsRequest("shortcuts")
-        titleLabel.set_label(`◤ SHORTCUTS (SUPER + ${openKey} para abrir/cerrar) ◢`)
+        const openKey = await fullKeyForAgsRequest("shortcuts")
+        titleLabel.set_label(`◤ SHORTCUTS (${openKey} para abrir/cerrar) ◢`)
     }
 }
 

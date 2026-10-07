@@ -23,15 +23,28 @@ export const getBinds = (): Promise<HyprBind[]> =>
         .then((out: string) => JSON.parse(out) as HyprBind[])
         .catch((e: any) => { print("[keymap] hyprctl binds:", e); return [] as HyprBind[] })
 
+// Bind (si existe) que dispara `ags request -i cyberpunk <command>`.
+export const bindForAgsRequest = async (command: string): Promise<HyprBind | undefined> =>
+    (await getBinds()).find((x) => x.dispatcher === "exec" && (x.arg || "").includes(`ags request -i cyberpunk ${command}`))
+
+// Combinación completa ("SUPER + SHIFT + S") para donde hay espacio de
+// sobra, como el título del panel de shortcuts.
+export const fullKeyForAgsRequest = async (command: string): Promise<string> => {
+    const b = await bindForAgsRequest(command)
+    return b ? [modmaskToStr(b.modmask), b.key].filter(Boolean).join(" + ") : "?"
+}
+
 // Para los keycaps compactos de los popups (20-24px, pensados para una
-// sola letra): todo el HUD comparte SUPER como base, así que se omite del
-// label - solo se muestra el resto de modificadores (si los hay) + la
-// tecla. "?" si el comando no tiene ningún bind (mejor una señal visible
-// de que falta mapear que una letra vieja/inventada).
+// sola letra): todos los binds del HUD van con SUPER + SHIFT, así que esa
+// base se omite del label y queda solo la tecla - con "SHIFT+X" el texto
+// no entraba en el keycap y no se leía. Si algún bind se sale de la base
+// se muestra lo que tenga de más (ALT, CTRL). "?" si el comando no tiene
+// ningún bind (mejor una señal visible de que falta mapear que una letra
+// vieja/inventada).
+const BASE_MODS = ["SUPER", "SHIFT"]
 export const keyForAgsRequest = async (command: string): Promise<string> => {
-    const binds = await getBinds()
-    const b = binds.find((x) => x.dispatcher === "exec" && (x.arg || "").includes(`ags request -i cyberpunk ${command}`))
+    const b = await bindForAgsRequest(command)
     if (!b) return "?"
-    const extraMods = MOD_BITS.filter(([bit, name]) => name !== "SUPER" && (b.modmask & bit) !== 0).map(([, name]) => name)
+    const extraMods = MOD_BITS.filter(([bit, name]) => !BASE_MODS.includes(name) && (b.modmask & bit) !== 0).map(([, name]) => name)
     return [...extraMods, b.key].filter(Boolean).join("+")
 }
