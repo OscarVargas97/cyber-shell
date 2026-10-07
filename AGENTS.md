@@ -29,7 +29,7 @@ le hablan por `ags request -i cyberpunk <comando>` (ej. `perf full`,
 | `components/modules/config.ts` | Config en runtime y los 3 planes de rendimiento |
 | `components/modules/{dock,appsmenu,shortcuts,notifmessages,cmodal,sidepanel}.ts` | Widgets/paneles |
 | `components/modules/services.ts` | Panel de servicios de fondo: estado, arranque/detención y baja persistente. La lista sale de `workos-services list` (systemd), no de un hardcodeo |
-| `components/modules/updates.ts` | Drift de forks (vs su upstream real, vía `gh`) y de herramientas del sistema (inputs de `flake.lock` de `workos`/`workos-private` vs su origen) — badge + panel, reemplaza el AUR/tema del upstream |
+| `components/modules/updates.ts` | Drift de forks (vs su upstream real, vía `gh`), de herramientas del sistema (inputs de `flake.lock` de `workos`/`workos-private` vs su origen) y de pines a mano (versión+hash dentro de un `.nix`, vs el último release del repo) — badge + panel, reemplaza el AUR/tema del upstream |
 | `components/style/` | SCSS → CSS con `sassc` |
 | `config/city.json` | Ubicación del clima (default del upstream) |
 | `install.sh`, `components/login/` | Del upstream para Arch — **no se usan en NixOS** |
