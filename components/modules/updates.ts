@@ -12,6 +12,13 @@
 //     workos-private (nixpkgs, home-manager, disko, ags, cyberShell, y
 //     workos visto desde workos-private) vía `nix flake metadata`,
 //     comparados contra el último commit real de cada uno.
+//   - Pines a mano: lo que un .nix fija por versión/tag + hash
+//     (fetchFromGitHub, o un fetchurl a un binario de release), contra el
+//     último release del repo. No son inputs del flake, así que
+//     `nix flake update` no los mueve y el escaneo de herramientas no los
+//     ve - pero son los únicos que piden trabajo a mano (editar la
+//     versión y recalcular el hash), así que son los que más conviene
+//     tener a la vista.
 import { Window, Box, Button, Label, Scrollable, EventBox, Anchor, Layer, Exclusivity, Keymode, focusedMonitor } from "./widget.ts"
 import Gtk from "gi://Gtk?version=3.0"
 import Gdk from "gi://Gdk?version=3.0"
@@ -32,9 +39,10 @@ const RECHECK_MS = 21600000 // 6h - son llamadas a gh/nix por red, sin apuro
 
 type ForkDrift = { kind: "fork"; id: string; title: string; detail: string; compareUrl: string; latestSha: string }
 type ToolDrift = { kind: "tool"; id: string; title: string; detail: string; repoDir: string; inputName: string; isPrivateLock: boolean }
-type DriftItem = ForkDrift | ToolDrift
+type PinDrift = { kind: "pin"; id: string; title: string; detail: string; releaseUrl: string }
+type DriftItem = ForkDrift | ToolDrift | PinDrift
 
-let current: { forks: ForkDrift[]; tools: ToolDrift[] } = { forks: [], tools: [] }
+let current: { forks: ForkDrift[]; tools: ToolDrift[]; pins: PinDrift[] } = { forks: [], tools: [], pins: [] }
 
 const readTextFile = (path: string): string => {
     try {
@@ -184,6 +192,106 @@ const scanToolDrift = async (): Promise<ToolDrift[]> => {
     return items
 }
 
+// ---- pines a mano (version+hash en un .nix) ----
+
+type NixPin = { owner: string; repo: string; tag: string; file: string }
+
+// Ventana de texto después de "fetchFromGitHub" donde buscar owner/repo/rev.
+// No parseamos el bloque entre llaves a propósito: un rev interpolado
+// ("v${finalAttrs.version}") trae su propia "}" y cortaría el match.
+const PIN_WINDOW = 400
+
+const nixField = (text: string, key: string): string | null => {
+    const m = text.match(new RegExp(`\\b${key}\\s*=\\s*"([^"]*)"`))
+    return m ? m[1] : null
+}
+
+// Resuelve "v${finalAttrs.version}" contra el `version = "0.22.0";` del
+// mismo archivo. Solo interpolaciones de una variable declarada ahí: si
+// algo queda sin resolver devolvemos null y el pin se ignora, que es
+// mejor que informar una versión inventada.
+const resolveNixStr = (raw: string, text: string): string | null => {
+    let out = raw
+    for (let i = 0; i < 5 && out.includes("${"); i++) {
+        out = out.replace(/\$\{([^}]+)\}/g, (_m: string, expr: string) => {
+            const name = (expr.trim().split(".").pop() || "").trim()
+            if (!/^[A-Za-z_][A-Za-z0-9_'-]*$/.test(name)) return "\u0000"
+            return nixField(text, name) ?? "\u0000"
+        })
+    }
+    return out.includes("\u0000") || out.includes("${") ? null : out
+}
+
+const pinsInNix = (text: string, file: string): NixPin[] => {
+    const out: NixPin[] = []
+    let idx = -1
+    while ((idx = text.indexOf("fetchFromGitHub", idx + 1)) !== -1) {
+        const chunk = text.slice(idx, idx + PIN_WINDOW)
+        // Solo la llamada real: el mismo nombre aparece en la lista de
+        // argumentos del archivo ({ lib, buildGoModule, fetchFromGitHub, ... }),
+        // y desde ahí la ventana alcanzaría a leer el bloque de más abajo
+        // y lo contaría dos veces.
+        if (!/^fetchFromGitHub\s*\{/.test(chunk)) continue
+        const owner = nixField(chunk, "owner"), repo = nixField(chunk, "repo"), rev = nixField(chunk, "rev")
+        if (!owner || !repo || !rev) continue
+        const tag = resolveNixStr(rev, text)
+        // Un rev que es un commit pelado no tiene release contra qué
+        // compararse: eso es un pin por commit, no por versión.
+        if (!tag || /^[0-9a-f]{40}$/.test(tag)) continue
+        out.push({ owner, repo, tag, file })
+    }
+    // fetchurl a un binario publicado: .../OWNER/REPO/releases/download/<tag>/<archivo>
+    const reUrl = /https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/releases\/download\/([^/"]+)\//g
+    let m: RegExpExecArray | null
+    while ((m = reUrl.exec(text)) !== null) {
+        const tag = resolveNixStr(m[3], text)
+        if (tag) out.push({ owner: m[1], repo: m[2], tag, file })
+    }
+    return out
+}
+
+const latestRelease = async (owner: string, repo: string): Promise<{ tag: string; url: string } | null> => {
+    const rel = await ghJson(["api", `repos/${owner}/${repo}/releases/latest`])
+    if (rel?.tag_name) return { tag: rel.tag_name, url: rel.html_url || `https://github.com/${owner}/${repo}/releases/latest` }
+    // Un repo puede pinearse por tag sin publicar releases: ahí el tag
+    // más nuevo es lo único que hay para comparar.
+    const tags = await ghJson(["api", `repos/${owner}/${repo}/tags`])
+    const t = Array.isArray(tags) && tags[0]?.name
+    return t ? { tag: t, url: `https://github.com/${owner}/${repo}/releases/tag/${t}` } : null
+}
+
+// "v0.22.0" y "0.22.0" son el mismo pin escrito distinto según si la "v"
+// quedó dentro de la variable o afuera.
+const sameVersion = (a: string, b: string) => a.replace(/^v/, "") === b.replace(/^v/, "")
+
+const scanPinDrift = async (): Promise<PinDrift[]> => {
+    const pins = new Map<string, NixPin>()
+    for (const dir of [WORKOS_DIR, WORKOS_PRIVATE_DIR]) {
+        let files: string[] = []
+        try {
+            files = (await execAsync(["find", dir, "-name", "*.nix", "-not", "-path", "*/.git/*"])).split("\n").filter(Boolean)
+        } catch (e) { print("[updates] find .nix:", dir, e); continue }
+        const repoName = dir.split("/").filter(Boolean).pop()
+        for (const f of files) {
+            const rel = f.startsWith(`${dir}/`) ? f.slice(dir.length + 1) : f
+            // Un mismo paquete puede estar pineado en más de un archivo o
+            // repo: una fila por repo+versión alcanza.
+            for (const p of pinsInNix(readTextFile(f), `${repoName}/${rel}`)) pins.set(`${p.owner}/${p.repo}@${p.tag}`, p)
+        }
+    }
+    const items: PinDrift[] = []
+    for (const p of pins.values()) {
+        const latest = await latestRelease(p.owner, p.repo)
+        if (!latest || sameVersion(latest.tag, p.tag)) continue
+        items.push({
+            kind: "pin", id: `pin:${p.owner}/${p.repo}@${p.tag}`, title: p.repo,
+            detail: `${p.tag} → ${latest.tag}  (${p.owner}/${p.repo}, ${p.file})`,
+            releaseUrl: latest.url,
+        })
+    }
+    return items
+}
+
 // ---- UI ----
 
 let panelWin: any = null, listBox: any = null
@@ -199,10 +307,15 @@ const rowFor = (item: DriftItem): any => {
     texts.set_orientation(Gtk.Orientation.VERTICAL)
     texts.set_hexpand(true)
 
-    const btn = Button({ label: item.kind === "fork" ? "VER CAMBIOS" : "ACTUALIZAR", className: "updates-btn" })
+    // Un pin no se puede aplicar solo (hay que editar la versión del .nix
+    // y recalcular el hash), así que el botón lleva al release y la
+    // decisión queda en la persona.
+    const btnLabel = item.kind === "fork" ? "VER CAMBIOS" : item.kind === "pin" ? "VER RELEASE" : "ACTUALIZAR"
+    const btn = Button({ label: btnLabel, className: "updates-btn" })
     btn.connect("clicked", () => {
         btn.set_sensitive(false)
         if (item.kind === "fork") openForkCompare(item.id)
+        else if (item.kind === "pin") openPinRelease(item.id)
         else applyToolUpdate(item.id)
     })
 
@@ -214,9 +327,9 @@ const rowFor = (item: DriftItem): any => {
 const renderList = () => {
     if (!listBox) return
     for (const child of listBox.get_children()) listBox.remove(child)
-    const all: DriftItem[] = [...current.forks, ...current.tools]
+    const all: DriftItem[] = [...current.forks, ...current.tools, ...current.pins]
     if (all.length === 0) {
-        listBox.add(Label({ label: "Todo al día - sin forks ni herramientas pendientes.", className: "updates-empty" }))
+        listBox.add(Label({ label: "Todo al día - sin forks, herramientas ni pines pendientes.", className: "updates-empty" }))
     } else {
         for (const item of all) listBox.add(rowFor(item))
     }
@@ -224,16 +337,18 @@ const renderList = () => {
     updateBadge()
 }
 
+const pendingCount = () => current.forks.length + current.tools.length + current.pins.length
+
 const updateBadge = () => {
-    const n = current.forks.length + current.tools.length
+    const n = pendingCount()
     for (const b of badges) {
         try { b.label.set_label(`⟳ ${n}`); b.evt.visible = n > 0 } catch { }
     }
 }
 
 export const refreshUpdates = async () => {
-    const [forks, tools] = await Promise.all([scanForkDrift(), scanToolDrift()])
-    current = { forks, tools }
+    const [forks, tools, pins] = await Promise.all([scanForkDrift(), scanToolDrift(), scanPinDrift()])
+    current = { forks, tools, pins }
     renderList()
     return current
 }
@@ -247,6 +362,15 @@ export const openForkCompare = async (id: string) => {
     state.forks[item.id.slice("fork:".length)] = { lastSeenSha: item.latestSha }
     saveState(state)
     await refreshUpdates()
+}
+
+// Sin estado de "ya lo vi", a diferencia de los forks: el pin sigue
+// pendiente hasta que el .nix cambie de versión, y esconderlo antes
+// sería perder justo el aviso que no da ninguna otra herramienta.
+export const openPinRelease = async (id: string) => {
+    const item = current.pins.find((i) => i.id === id)
+    if (!item) return
+    try { await execAsync(["xdg-open", item.releaseUrl]) } catch (e) { print("[updates] xdg-open:", e) }
 }
 
 export const applyToolUpdate = async (id: string) => {
@@ -316,7 +440,7 @@ export const UpdatesPanel = () => {
 
     const title = Label({ label: "◤ ACTUALIZACIONES ◢", className: "updates-title" })
     title.set_halign(Gtk.Align.START)
-    const legend = Label({ label: "Forks vs su upstream real, y herramientas del sistema vs flake.lock · Escape para cerrar", className: "updates-legend" })
+    const legend = Label({ label: "Forks vs su upstream real, herramientas vs flake.lock y pines a mano vs su último release · Escape para cerrar", className: "updates-legend" })
     legend.set_halign(Gtk.Align.START)
 
     const inner = Box({ className: "updates-wrap", children: [title, legend, scroll] })
@@ -342,7 +466,7 @@ export const UpdatesPanel = () => {
 
     renderList()
     const recheckAndToast = () => refreshUpdates().then(() => {
-        const n = current.forks.length + current.tools.length
+        const n = pendingCount()
         if (n > 0 && !panelWin.visible) showToast(`${n} ACTUALIZACION${n === 1 ? "" : "ES"} PENDIENTE${n === 1 ? "" : "S"}`)
     })
     timeout(4000, recheckAndToast)
