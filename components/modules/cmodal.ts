@@ -347,14 +347,23 @@ const setAppVol = (name, id, t) => {
 
 // NEW! audio devices + the apps using em. comes from pactl list sinks /
 // pactl list sources, wpctl only hands over the volume, no desc or state
-const SINKS_CMD = `pactl list sinks 2>/dev/null | awk 'BEGIN{id="";desc="";vol="";mute="";sus="no"}
-/^Sink #/{if(id!="")print id"|"desc"|"vol"|"mute"|"sus; id=""; desc=""; vol=""; mute=""; sus="no"}
+// nick = nombre corto del puerto ("Speaker", "HDMI / DisplayPort 1 Output"):
+// en placas con UCM todos los sinks comparten la misma Description, así que
+// sin él las filas eran indistinguibles. unav = el puerto activo está "not
+// available" (HDMI sin monitor): WirePlumber ignora ese default y cae al
+// siguiente, así que elegirlo parecía no hacer nada
+const SINKS_CMD = `pactl list sinks 2>/dev/null | awk 'function out(){if(id!="")print id"|"desc"|"vol"|"mute"|"sus"|"nick"|"unav}
+BEGIN{id="";desc="";vol="";mute="";sus="no";nick="";unav="no"}
+/^Sink #/{out(); id=""; desc=""; vol=""; mute=""; sus="no"; nick=""; unav="no"; split("", avail)}
 /^[	 ]+Name: /{name=$0; sub(/^[	 ]+Name: /,"",name); if(id=="")id=name}
 /^[ 	]+Description: /{desc=$0; sub(/^[ 	]+Description: /,"",desc)}
 /^[ 	]+Volume: /{for(k=2;k<=NF;k++)if($k ~ /%$/){vol=$k; sub(/%/,"",vol); break}}
 /^[ 	]+Mute: /{mute=$2}
 /^[ 	]+State: /{if($2=="SUSPENDED")sus="yes"}
-END{if(id!="")print id"|"desc"|"vol"|"mute"|"sus}'`
+/^[ 	]+node.nick = /{nick=$0; sub(/^[^"]*"/,"",nick); sub(/"$/,"",nick)}
+($1=="[Out]"||$1=="[In]")&&NF>2{pn=$2; sub(/:$/,"",pn); avail[pn]=($0 ~ /not available[)]$/)?"no":"yes"}
+/^[ 	]+Active Port: /{if(avail[$NF]=="no")unav="yes"}
+END{out()}'`
 // same awk, sources instead of sinks
 const SRCS_CMD = SINKS_CMD
   .replace("pactl list sinks", "pactl list sources")
@@ -424,7 +433,10 @@ const drawTabs = (ctx, g, x, y, tabs, sel, onPick) => {
 
 // device row -> name + slider + mute + set default
 const DEV_ROW_H = 62
-const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
+// nick primero: la Description es igual en todos los puertos de una placa
+// y a 26 caracteres solo quedaba el nombre del controlador
+const devLabel = (d) => d.nick || d.desc || d.id
+const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId, onSetDefault) => {
     const [BR, BG, BB] = g.col
     const isDef = !!d.default || d.id === defId
     const isSusp = !!d.suspended
@@ -439,9 +451,9 @@ const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
         ctx.setSourceRGBA(BR, BG, BB, 0.25); ctx.setLineWidth(0.7)
         for (let yy = y + 2; yy < y + h; yy += 4) { ctx.newPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + w - 2, yy); ctx.stroke() }
     }
-    const name = (d.desc || d.id).slice(0, 26)
-    const prefix = isSusp ? "○ " : isDef ? "● " : "  "
-    txt(ctx, x + 8, y + 13, prefix + name.toUpperCase(), MONO, 9.5, g.col, isDef && !isSusp ? 0.98 : 0.55, 1)
+    const name = devLabel(d).slice(0, 40) + (d.unavailable ? " · UNPLUGGED" : "")
+    const prefix = isDef ? "● " : isSusp ? "○ " : "  "
+    txt(ctx, x + 8, y + 13, prefix + name.toUpperCase(), MONO, 9.5, g.col, d.unavailable ? 0.35 : isDef ? 0.98 : 0.7, 1)
     const pct = Math.round(Math.max(0, Math.min(1.5, d.vol || 0)) * 100)
     const pctTxt = `${pct}%`
     const pctW = ctx.textExtents(pctTxt).width
@@ -460,7 +472,7 @@ const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
     const btnY = y + 38
     const btnH = 18
     const muteBtnW = 64
-    const setBtnW = isDef ? 132 : 88
+    const setBtnW = isDef || d.unavailable ? 132 : 88
     const muteBx = x + w - 8 - muteBtnW
     const setBx = x + 8
     drawBtn(ctx, g.push, muteBx, btnY, muteBtnW, btnH, "MUTE", () => {
@@ -468,20 +480,20 @@ const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
         g.refresh()
         sh(`pactl set-${kind}-mute ${d.id} toggle`).then(() => timeout(120, () => g.refresh()))
     }, d.muted, g.col, ch(d.muted ? 0xf026 : 0xf028), 10)
-    if (isDef) {
+    // un puerto sin conectar no se ofrece como default: WirePlumber lo
+    // guardaría pero seguiría sonando por otro, sin ningún aviso
+    if (isDef || d.unavailable) {
         ctx.setSourceRGBA(BR, BG, BB, 0.18); ctx.setLineWidth(0.7)
         btnPath(ctx, setBx, btnY, setBtnW, btnH); ctx.fill()
         ctx.setSourceRGBA(BR, BG, BB, 0.55); btnPath(ctx, setBx, btnY, setBtnW, btnH); ctx.stroke()
         ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(10)
-        const lbl = "ALREADY DEFAULT"
+        const lbl = isDef ? "ALREADY DEFAULT" : "NOT CONNECTED"
         const lw = ctx.textExtents(lbl).width
         ctx.setSourceRGBA(BR, BG, BB, 0.7)
         ctx.moveTo(setBx + setBtnW / 2 - lw / 2, btnY + btnH / 2 + 3.5); ctx.showText(lbl)
         g.push({ kind: "btn", hoverable: true, key: `def-${d.id}|${btnY}`, bx0: setBx, by0: btnY, bx1: setBx + setBtnW, by1: btnY + btnH, on: () => {} })
     } else {
-        drawBtn(ctx, g.push, setBx, btnY, setBtnW, btnH, "SET DEFAULT", () => {
-            sh(`pactl set-default-${kind === "sink" ? "sink" : "source"} ${d.id}`).then(() => timeout(80, () => g.refresh()))
-        }, false, g.col, "", 10)
+        drawBtn(ctx, g.push, setBx, btnY, setBtnW, btnH, "SET DEFAULT", () => onSetDefault(d), false, g.col, "", 10)
     }
 }
 
@@ -494,7 +506,7 @@ const drawSectionToggle = (ctx, g, x, y, w, leftLabel, rightLabel, sel, onPick) 
 // id is the device name not the #index, get-default-sink matches on name
 const parseDeviceList = (out, def) => out.trim().split("\n").filter(Boolean).map((l) => {
     const a = l.split("|")
-    return { id: a[0], desc: a[1] || a[0], vol: Math.min(1.5, (parseFloat(a[2]) || 0) / 100), muted: a[3] === "yes", suspended: a[4] === "yes", default: a[0] === def }
+    return { id: a[0], desc: a[1] || a[0], vol: Math.min(1.5, (parseFloat(a[2]) || 0) / 100), muted: a[3] === "yes", suspended: a[4] === "yes", nick: a[5] || "", unavailable: a[6] === "yes", default: a[0] === def }
 })
 const VolCtrl = () => {
     const st: any = { master: 0.5, muted: false, apps: [], recApps: [], mic: 0.5, micMuted: false, outDevices: [], inDevices: [], defSink: "", defSrc: "", volTab: "general" }
@@ -588,14 +600,25 @@ const VolCtrl = () => {
         const defY = statsY + 62
         sectionHeader(ctx, g, x, defY, "// DEFAULT OUTPUT DEVICE", w)
         const defOut = st.outDevices.find((d) => d.default) || st.outDevices.find((d) => d.id === st.defSink) || st.outDevices[0]
-        const defOutLbl = defOut ? (defOut.desc || defOut.id).slice(0, 40).toUpperCase() : "NO SINK"
+        const defOutLbl = defOut ? devLabel(defOut).slice(0, 40).toUpperCase() : "NO SINK"
         drawBtn(ctx, g.push, x, defY + 18, w - 8, 24, defOutLbl, () => { st.volTab = "devices"; g.refresh() }, true, g.col, "", 10)
 
         const defInY = defY + 68
         sectionHeader(ctx, g, x, defInY, "// DEFAULT INPUT DEVICE", w)
         const defIn = st.inDevices.find((d) => d.default) || st.inDevices.find((d) => d.id === st.defSrc) || st.inDevices[0]
-        const defInLbl = defIn ? (defIn.desc || defIn.id).slice(0, 40).toUpperCase() : "NO MIC"
+        const defInLbl = defIn ? devLabel(defIn).slice(0, 40).toUpperCase() : "NO MIC"
         drawBtn(ctx, g.push, x, defInY + 18, w - 8, 24, defInLbl, () => { st.volTab = "devices"; g.refresh() }, true, g.col, "", 10)
+    }
+    // marca el nuevo default al instante y relee el estado real apenas
+    // pactl termina: antes solo se redibujaba y el cambio recién aparecía
+    // con el poll (hasta 2 s), así que el click parecía no hacer nada
+    const setDefault = (d) => {
+        const sink = st.outDevices.includes(d)
+        const list = sink ? st.outDevices : st.inDevices
+        list.forEach((o) => { o.default = o === d })
+        if (sink) st.defSink = d.id; else st.defSrc = d.id
+        ctrl.requestDraw()
+        sh(`pactl set-default-${sink ? "sink" : "source"} '${d.id}'`).then(() => timeout(150, refresh))
     }
     // all sinks + sources, monitors filtered on refresh
     const drawDevices = (ctx, g, x, y, w) => {
@@ -604,7 +627,7 @@ const VolCtrl = () => {
         let cy = y + 18
         if (!st.outDevices.length) { txt(ctx, x, cy, "no output devices", MONO, 9, g.col, 0.35); return }
         for (const d of st.outDevices) {
-            drawDeviceRow(ctx, g, x, cy, w, d, "sink", st.defSink)
+            drawDeviceRow(ctx, g, x, cy, w, d, "sink", st.defSink, setDefault)
             cy += DEV_ROW_H + 6
         }
         const yS = cy + 20
@@ -612,7 +635,7 @@ const VolCtrl = () => {
         let iy = yS + 18
         if (!st.inDevices.length) { txt(ctx, x, iy, "no input devices", MONO, 9, g.col, 0.35); return }
         for (const d of st.inDevices) {
-            drawDeviceRow(ctx, g, x, iy, w, d, "source", st.defSrc)
+            drawDeviceRow(ctx, g, x, iy, w, d, "source", st.defSrc, setDefault)
             iy += DEV_ROW_H + 6
         }
     }
